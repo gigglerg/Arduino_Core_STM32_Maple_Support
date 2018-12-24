@@ -8,18 +8,18 @@ Maple Mini support in Arduino IDE is great until you want to use other device pe
 
 ## Features
 * DFU support
- * Original MapleLabs
- * Bootloader 2.0
+     * Original MapleLabs
+     * Bootloader 2.0
 * USB CDC support.  Full speed, device only, Bulk pipe
- * Flush control options
-  * Manual.  You decide when to send data to host
-  * Semi-automatic.  Done for you based upon millis() timeout and write data
-  * Automatic.  Least efficient and will send single characters (like original CDC implementation)
- * Maple automatic reset support (user code has to call CDC serial functions)
- * Has original MapleLabs CDC descriptors for seamless use
+     * Flush control options
+          * Manual.  You decide when to send data to host
+          * Semi-automatic.  Done for you based upon millis() timeout and write data
+          * Automatic.  Least efficient and will send single characters (like original CDC implementation)
+     * Maple automatic reset support (user code has to call CDC serial functions)
+     * Has original MapleLabs CDC descriptors for seamless use
 * Flash device support
- * F103CB, 128K (like original)
- * F103C8, 64K (like blue pill etc.)
+     * F103CB, 128K (like original)
+     * F103C8, 64K (like blue pill etc.)
 
 ## Known issues
 * Automatic reset.  Implementation for magic character sequence handled in the Arduino CDC class CDCSerial rather than USB ISR.  For automatic reset to work, user code must invoke repeatedly CDC serial functions, like available() or flush() or read() etc.
