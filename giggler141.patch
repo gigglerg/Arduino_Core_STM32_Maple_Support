@@ -1,0 +1,3574 @@
+diff -Naur ./1.4.0/boards.txt ./1.4.1/boards.txt
+--- ./1.4.0/boards.txt	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/boards.txt	2018-12-22 18:39:30.401320400 +0000
+@@ -571,6 +571,7 @@
+ Maple.build.pid=0x0004
+ Maple.vid.0=0x1EAF
+ Maple.pid.0=0x0004
++Maple.upload.usbID=1EAF:0003
+ 
+ Maple.build.core=arduino
+ Maple.build.board=Maple
+@@ -587,6 +588,19 @@
+ Maple.menu.pnum.MAPLEMINI_F103CB.build.product_line=STM32F103xB
+ Maple.menu.pnum.MAPLEMINI_F103CB.build.variant=MAPLEMINI_F103CB
+ Maple.menu.pnum.MAPLEMINI_F103CB.build.cmsis_lib_gcc=arm_cortexM3l_math
++Maple.menu.pnum.MAPLEMINI_F103CB.build.ldscript=ldscript128.ld
++
++# MAPLEMINI_F103C8 board
++Maple.menu.pnum.MAPLEMINI_F103C8=Maple Mini F103C8
++Maple.menu.pnum.MAPLEMINI_F103C8.upload.maximum_size=65536
++Maple.menu.pnum.MAPLEMINI_F103C8.upload.maximum_data_size=20480
++Maple.menu.pnum.MAPLEMINI_F103C8.build.mcu=cortex-m3
++Maple.menu.pnum.MAPLEMINI_F103C8.build.board=MAPLEMINI_F103C8
++Maple.menu.pnum.MAPLEMINI_F103C8.build.series=STM32F1xx
++Maple.menu.pnum.MAPLEMINI_F103C8.build.product_line=STM32F103xB
++Maple.menu.pnum.MAPLEMINI_F103C8.build.variant=MAPLEMINI_F103CB
++Maple.menu.pnum.MAPLEMINI_F103C8.build.cmsis_lib_gcc=arm_cortexM3l_math
++Maple.menu.pnum.MAPLEMINI_F103C8.build.ldscript=ldscript64.ld
+ 
+ # Upload menu
+ Maple.menu.upload_method.STLinkMethod=STLink
+@@ -597,6 +611,27 @@
+ Maple.menu.upload_method.serialMethod.upload.protocol=maple_serial
+ Maple.menu.upload_method.serialMethod.upload.tool=serial_upload
+ 
++Maple.menu.upload_method.DFUMethod1=DFU original
++Maple.menu.upload_method.DFUMethod1.usbID=1EAF:0003
++Maple.menu.upload_method.DFUMethod1.upload.protocol=maple_dfu
++Maple.menu.upload_method.DFUMethod1.upload.tool=maple_upload
++Maple.menu.upload_method.DFUMethod1.upload.file_type=bin
++Maple.menu.upload_method.DFUMethod1.upload.auto_reset=true
++Maple.menu.upload_method.DFUMethod1.upload.altID=1
++Maple.menu.upload_method.DFUMethod1.compiler.c.extra_flags=-DVECT_TAB_OFFSET=0x5000
++Maple.menu.upload_method.DFUMethod1.compiler.cpp.extra_flags=-DVECT_TAB_OFFSET=0x5000
++
++Maple.menu.upload_method.DFUMethod2=DFU bootloader2
++Maple.menu.upload_method.DFUMethod2.usbID=1EAF:0003
++Maple.menu.upload_method.DFUMethod2.upload.protocol=maple_dfu
++Maple.menu.upload_method.DFUMethod2.upload.tool=maple_upload
++Maple.menu.upload_method.DFUMethod2.upload.file_type=bin
++Maple.menu.upload_method.DFUMethod2.upload.auto_reset=true
++Maple.menu.upload_method.DFUMethod2.upload.altID=2
++Maple.menu.upload_method.DFUMethod2.compiler.c.extra_flags=-DVECT_TAB_OFFSET=0x2000
++Maple.menu.upload_method.DFUMethod2.compiler.cpp.extra_flags=-DVECT_TAB_OFFSET=0x2000
++
++
+ ################################################################################
+ # RAK boards
+ 
+@@ -719,10 +754,18 @@
+ 
+ Maple.menu.xserial.generic=Enabled with generic Serial
+ Maple.menu.xserial.none=Enabled without generic Serial
+-Maple.menu.xserial.none.build.xSerial=-DHAL_UART_MODULE_ENABLED -DHWSERIAL_NONE
++Maple.menu.xserial.none.build.xSerial=-DHAL_UART_MODULE_ENABLED -DSERIAL_USB
+ Maple.menu.xserial.disabled=Disabled (No Serial)
+ Maple.menu.xserial.disabled.build.xSerial=
+ 
++# set CDC_DISCONNECT_PIN if not default 34
++# set CDC_FLUSH_TYPE 0, 1, 2, 4 (enum eFLUSH_xxxx) from CDCSerial
++# set CDC_START_DELAY1 n milli seconds
++# set CDC_START_DELAY2 n milli seconds
++Maple.menu.usb.none=None
++Maple.menu.usb.CDC=CDC Device
++Maple.menu.usb.CDC.build.enable_usb={build.usb_flags} -DUSBD_USE_CDC -DUSE_USB_FS -DUSBCON -DGIGGLERS_SERIAL 
++
+ RAK.menu.xserial.generic=Enabled with generic Serial
+ RAK.menu.xserial.none=Enabled without generic Serial
+ RAK.menu.xserial.none.build.xSerial=-DHAL_UART_MODULE_ENABLED -DHWSERIAL_NONE
+@@ -735,6 +778,7 @@
+ RemRam.menu.xserial.disabled=Disabled (No Serial)
+ RemRam.menu.xserial.disabled.build.xSerial=
+ 
++
+ # USB connectivity
+ Nucleo_144.menu.usb.none=None
+ Nucleo_144.menu.usb.HID=HID keyboard and mouse support (if available)
+diff -Naur ./1.4.0/CI/build/arduino-builder.py ./1.4.1/CI/build/arduino-builder.py
+--- ./1.4.0/CI/build/arduino-builder.py	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/CI/build/arduino-builder.py	2018-12-22 18:28:24.644320400 +0000
+@@ -271,7 +271,7 @@
+ # Board list have to be initialized before call this function
+ def parse_core_config():
+     assert board_type, "Board list not initialized"
+-    # Extract boards names to create a set
++    # Extract boards names to create a set`
+     board_name_set = set([board for board in board_type])
+     for sketch in core_config["sketches"]:
+         if sketch["applicable"] is True:
+diff -Naur ./1.4.0/CI/build/conf/cores_config.json ./1.4.1/CI/build/conf/cores_config.json
+--- ./1.4.0/CI/build/conf/cores_config.json	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/CI/build/conf/cores_config.json	2018-12-22 18:28:24.648320400 +0000
+@@ -83,7 +83,7 @@
+             "BLUE_F407VE_Mini",
+             "BLUEPILL_F103C8",
+             "MAPLEMINI_F103CB"
+-          ]
++			]
+         },
+         {
+           "pattern": "X_NUCLEO_NFC03A1_HelloWorld.ino",
+diff -Naur ./1.4.0/cores/arduino/board.h ./1.4.1/cores/arduino/board.h
+--- ./1.4.0/cores/arduino/board.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/cores/arduino/board.h	2018-12-22 18:28:24.651320400 +0000
+@@ -28,4 +28,5 @@
+ #ifdef __cplusplus
+ }
+ #endif // __cplusplus
++
+ #endif /* _BOARD_H_ */
+diff -Naur ./1.4.0/cores/arduino/stm32/usb_interface.c ./1.4.1/cores/arduino/stm32/usb_interface.c
+--- ./1.4.0/cores/arduino/stm32/usb_interface.c	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/cores/arduino/stm32/usb_interface.c	2018-12-22 18:28:24.654320400 +0000
+@@ -52,7 +52,7 @@
+ /**
+   * @}
+   */
+-
++  
+ #ifdef __cplusplus
+  extern "C" {
+ #endif
+diff -Naur ./1.4.0/cores/arduino/wiring.h ./1.4.1/cores/arduino/wiring.h
+--- ./1.4.0/cores/arduino/wiring.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/cores/arduino/wiring.h	2018-12-22 18:28:24.658320400 +0000
+@@ -46,6 +46,9 @@
+ #include "WCharacter.h"
+ #include "WMath.h"
+ #include "WString.h"
++#if defined(USBD_USE_CDC) && defined(USE_USB_FS) && defined(USBCON)
++#include <CDCSerial.h>
++#endif // defined(USBD_USE_CDC) && defined(USE_USB_FS) && defined(USBCON)
+ #endif // __cplusplus
+ 
+ #define clockCyclesPerMicrosecond() ( SystemCoreClock / 1000000L )
+diff -Naur ./1.4.0/platform.txt ./1.4.1/platform.txt
+--- ./1.4.0/platform.txt	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/platform.txt	2018-12-22 18:39:50.210320400 +0000
+@@ -9,7 +9,7 @@
+ 
+ # STM compile variables
+ # ----------------------
+-compiler.stm.extra_include="-I{build.source.path}" "-I{build.core.path}/avr" "-I{build.core.path}/stm32" "-I{build.core.path}/stm32/LL" "-I{build.system.path}/Drivers/{build.series}_HAL_Driver/Inc/" "-I{build.system.path}/Drivers/{build.series}_HAL_Driver/Src/" "-I{build.system.path}/{build.series}/" "-I{build.variant.path}/usb" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Core/Inc" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Core/Src"
++compiler.stm.extra_include="-I{build.source.path}" "-I{build.core.path}/avr" "-I{build.core.path}/stm32" "-I{build.core.path}/stm32/LL" "-I{build.system.path}/Drivers/{build.series}_HAL_Driver/Inc/" "-I{build.system.path}/Drivers/{build.series}_HAL_Driver/Src/" "-I{build.system.path}/{build.series}/" "-I{build.variant.path}/usb" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Core/Inc" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Core/Src" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src"
+ 
+ # "-I{build.system.path}/Drivers/BSP/Components" "-I{build.system.path}/Middlewares/Third_Party/FatFs/src"  "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Core/Src" "-I{build.system.path}/Middlewares/ST/STM32_USB_Device_Library/Class/HID/Inc"
+ 
+@@ -181,3 +181,14 @@
+ tools.bmp_upload.upload.params.verbose=-batch
+ tools.bmp_upload.upload.params.quiet=--batch-silent
+ tools.bmp_upload.upload.pattern="{path}{cmd}" -nx -b {upload.speed} {upload.verbose} -ex "set confirm off" -ex "target extended-remote {serial.port}" -ex "monitor swdp_scan" -ex "attach 1" -ex "load" -ex "compare-sections" -ex "kill" "{build.path}/{build.project_name}.elf"
++
++# Upload using Maple bootloader over DFU
++tools.maple_upload.cmd=maple_upload
++tools.maple_upload.cmd.windows=maple_upload.bat
++tools.maple_upload.path={runtime.tools.STM32Tools.path}/tools/win
++tools.maple_upload.path.macosx={runtime.tools.STM32Tools.path}/tools/macosx
++tools.maple_upload.path.linux={runtime.tools.STM32Tools.path}/tools/linux
++tools.maple_upload.path.linux64={runtime.tools.STM32Tools.path}/tools/linux64    
++tools.maple_upload.upload.params.verbose=-d
++tools.maple_upload.upload.params.quiet=
++tools.maple_upload.upload.pattern="{path}/{cmd}" {serial.port.file} {upload.altID} {upload.usbID} "{build.path}/{build.project_name}.bin"
+diff -Naur ./1.4.0/system/Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xb.h ./1.4.1/system/Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xb.h
+--- ./1.4.0/system/Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xb.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/system/Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xb.h	2018-12-22 18:28:24.668320400 +0000
+@@ -615,8 +615,7 @@
+   * @{
+   */
+ 
+-
+-#define FLASH_BASE            0x08000000U /*!< FLASH base address in the alias region */
++#define FLASH_BASE            0x08002000U /*!< FLASH base address in the alias region */
+ #define FLASH_BANK1_END       0x0801FFFFU /*!< FLASH END address of bank1 */
+ #define SRAM_BASE             0x20000000U /*!< SRAM base address in the alias region */
+ #define PERIPH_BASE           0x40000000U /*!< Peripheral base address in the alias region */
+diff -Naur ./1.4.0/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc/usbd_cdc.h ./1.4.1/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc/usbd_cdc.h
+--- ./1.4.0/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc/usbd_cdc.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc/usbd_cdc.h	2018-12-22 18:28:24.675320400 +0000
+@@ -102,12 +102,11 @@
+ {
+   int8_t (* Init)          (void);
+   int8_t (* DeInit)        (void);
+-  int8_t (* Control)       (uint8_t, uint8_t * , uint16_t);   
++  int8_t (* Control)       (uint8_t, uint8_t * , uint16_t, uint16_t, uint16_t);
+   int8_t (* Receive)       (uint8_t *, uint32_t *);  
+ 
+ }USBD_CDC_ItfTypeDef;
+ 
+-
+ typedef struct
+ {
+   uint32_t data[CDC_DATA_HS_MAX_PACKET_SIZE/4];      /* Force 32bits alignment */
+@@ -159,6 +158,9 @@
+ uint8_t  USBD_CDC_ReceivePacket      (USBD_HandleTypeDef *pdev);
+ 
+ uint8_t  USBD_CDC_TransmitPacket     (USBD_HandleTypeDef *pdev);
++
++uint32_t USBD_CDC_GetReceiveSize(USBD_HandleTypeDef *pdev);
++
+ /**
+   * @}
+   */ 
+diff -Naur ./1.4.0/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c ./1.4.1/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c
+--- ./1.4.0/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/system/Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c	2018-12-22 18:28:24.679320400 +0000
+@@ -611,7 +611,8 @@
+       {
+         ((USBD_CDC_ItfTypeDef *)pdev->pUserData)->Control(req->bRequest,
+                                                           (uint8_t *)hcdc->data,
+-                                                          req->wLength);
++                                                          req->wLength, 
++														  req->wValue, req->wIndex);
+           USBD_CtlSendData (pdev, 
+                             (uint8_t *)hcdc->data,
+                             req->wLength);
+@@ -631,7 +632,8 @@
+     {
+       ((USBD_CDC_ItfTypeDef *)pdev->pUserData)->Control(req->bRequest,
+                                                         (uint8_t*)req,
+-                                                        0);
++                                                        0,
++														req->wValue, req->wIndex);
+     }
+     break;
+ 
+@@ -723,7 +725,7 @@
+   {
+     ((USBD_CDC_ItfTypeDef *)pdev->pUserData)->Control(hcdc->CmdOpCode,
+                                                       (uint8_t *)hcdc->data,
+-                                                      hcdc->CmdLength);
++                                                      hcdc->CmdLength, 0, 0);
+       hcdc->CmdOpCode = 0xFF; 
+       
+   }
+@@ -851,16 +853,21 @@
+   {
+     if(hcdc->TxState == 0)
+     {
++      USBD_StatusTypeDef r;
++	  
+       /* Tx Transfer in progress */
+       hcdc->TxState = 1;
+       
+       /* Transmit next packet */
+-      USBD_LL_Transmit(pdev,
++      r = USBD_LL_Transmit(pdev,
+                        CDC_IN_EP,
+                        hcdc->TxBuffer,
+                        hcdc->TxLength);
+       
+-      return USBD_OK;
++	  if (USBD_OK != r) {
++          hcdc->TxState = 0;
++	  }
++      return r;
+     }
+     else
+     {
+@@ -873,6 +880,12 @@
+   }
+ }
+ 
++extern uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *pdev, uint8_t ep_addr);
++
++uint32_t USBD_CDC_GetReceiveSize(USBD_HandleTypeDef *pdev) {
++  return (uint32_t)USBD_LL_GetRxDataSize(pdev, CDC_OUT_EP);
++}
++
+ 
+ /**
+   * @brief  USBD_CDC_ReceivePacket
+@@ -881,7 +894,7 @@
+   * @retval status
+   */
+ uint8_t  USBD_CDC_ReceivePacket(USBD_HandleTypeDef *pdev)
+-{      
++{
+   USBD_CDC_HandleTypeDef   *hcdc = (USBD_CDC_HandleTypeDef*) pdev->pClassData;
+   
+   /* Suspend or Resume USB Out process */
+diff -Naur ./1.4.0/system/STM32F1xx/system_stm32f1xx.c ./1.4.1/system/STM32F1xx/system_stm32f1xx.c
+--- ./1.4.0/system/STM32F1xx/system_stm32f1xx.c	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/system/STM32F1xx/system_stm32f1xx.c	2018-12-22 18:28:24.683320400 +0000
+@@ -111,6 +111,7 @@
+      Internal SRAM. */
+ /* #define VECT_TAB_SRAM */
+ #ifndef VECT_TAB_OFFSET
++#error STOP!
+ #define VECT_TAB_OFFSET  0x00000000U /*!< Vector Table base offset field.
+                                   This value must be a multiple of 0x200. */
+ #endif
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/CDCSerial.cpp ./1.4.1/variants/MAPLEMINI_F103CB/CDCSerial.cpp
+--- ./1.4.0/variants/MAPLEMINI_F103CB/CDCSerial.cpp	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/CDCSerial.cpp	2018-12-23 17:21:23.746424900 +0000
+@@ -0,0 +1,294 @@
++/* Copyright (c) 2018, Dave Cox
++**
++** Permission to use, copy, modify, and/or distribute this software for
++** any purpose with or without fee is hereby granted, provided that the
++** above copyright notice and this permission notice appear in all copies.
++**
++** THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
++** WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
++** WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR
++** BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES
++** OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
++** WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
++** ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
++** SOFTWARE.
++*/
++
++#include <cstdint>
++#include "Arduino.h"
++#include "CDCSerial.h"
++#include "usbd_cdc_if.h"
++
++/* This code is really poor, it was never intended to be used for anything but act as a stop gap between v1.5.0 of arduino stm32 core being released */
++extern USBD_DescriptorsTypeDef FS_Desc;
++extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
++extern volatile uint32_t gCDCConnected;
++USBD_HandleTypeDef hUsbDeviceFS;
++
++
++CDCSerial::CDCSerial(uint32_t deviceId, int32_t pinDisconnect, eFLUSH flush) : _deviceId(deviceId), _pinDisconnect(pinDisconnect), _flushType(flush), _lastFlush(millis()) {
++	_wb.ri = _wb.rc = _wb.wi = _wb.wc = 0;
++	_rb.ri = _rb.rc = _rb.wi = _rb.wc = 0;
++}
++
++#if !defined(CDC_START_DELAY1)
++#define CDC_START_DELAY1 10
++#endif
++#if !defined(CDC_START_DELAY2)
++#define CDC_START_DELAY2 10
++#endif
++
++void CDCSerial::begin(unsigned long baud) {
++	(void)baud;
++	if (_pinDisconnect!=-1) {
++		pinMode(_pinDisconnect, INPUT);
++		pinMode(_pinDisconnect, OUTPUT);
++		setBusConnectionState(false);
++	}
++	if (CDC_START_DELAY1>0) {
++		USBD_LL_Delay(CDC_START_DELAY1);	/* 10mS seems OK */
++	}
++	USBD_Init(&hUsbDeviceFS, &FS_Desc, _deviceId);
++	USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC);
++	USBD_CDC_RegisterInterface(&hUsbDeviceFS, &USBD_Interface_fops_FS);
++	setBusConnectionState(true);
++	if (CDC_START_DELAY2>0) {
++		USBD_LL_Delay(CDC_START_DELAY2);	/* 10mS seems OK */
++	}
++	USBD_Start(&hUsbDeviceFS);
++}
++
++
++void CDCSerial::end() {
++	setBusConnectionState(false);
++	USBD_Stop(&hUsbDeviceFS);
++}
++
++
++int CDCSerial::available(void) {
++	updateReadBuffer();
++
++	handleFlush();
++	
++	return (_rb.wc != _rb.rc) ? 1 : 0;
++}
++
++
++int CDCSerial::peek(void) {
++	int r = -1; /* no data */
++
++	updateReadBuffer();
++
++	/* any data? take byte (no update index or count) */
++	if (_rb.wc != _rb.rc) {
++		r = _rb.rx[_rb.ri];
++	}
++
++	return r;
++}
++
++
++int CDCSerial::read(void) {
++	int r = -1; /* no data */
++
++	updateReadBuffer();
++
++	handleFlush();
++
++	/* any data? take byte */
++	if (_rb.wc != _rb.rc) {
++		r = _rb.rx[_rb.ri++];
++		if (_rb.ri>=(CDC_DATA_FS_MAX_PACKET_SIZE*CDCSERIAL_MAX_RX_PACKETS)) {
++			_rb.ri = 0;
++		}
++		_rb.rc++;
++	}
++
++	return r;
++}
++
++
++uint32_t CDCSerial::updateReadBuffer() {
++	uint32_t ledtr = CDC_Seen_DTR_Low_Edge_FS();
++	
++	/* attempt to remove received data previously populated by cdc handler via usb isr */
++	uint8_t *next = &_rb.rx[_rb.wi];
++	uint32_t l = CDC_Copy_Receive_FS(next), lwi = _rb.wi;
++	if (l) {		
++		if ((l + _rb.wi)>=(CDC_DATA_FS_MAX_PACKET_SIZE*CDCSERIAL_MAX_RX_PACKETS)) {
++			uint32_t wi = _rb.wi;
++			int32_t ll = static_cast<int32_t>(l);
++			while(--ll>=0) {
++				if (_rb.wi==(CDC_DATA_FS_MAX_PACKET_SIZE*CDCSERIAL_MAX_RX_PACKETS)) {
++					_rb.wi=0;
++				}
++				_rb.rx[_rb.wi++] = _rb.rx[wi++];
++			}
++		}else {
++			_rb.wi += l;
++		}
++		_rb.wc += l;		
++	}
++
++	/* available? and new -edge on dtr? */
++	if (_rb.wc != _rb.rc && ledtr) {
++		static const uint8_t magic[4] = {'1', 'E', 'A', 'F'};	
++
++		CDC_Clear_DTR_Low_Edge_FS();
++
++		/* enough data? */
++        if (l >= sizeof(magic))
++		{
++			uint32_t trigger = 1;
++            for(uint32_t i = 0; i < sizeof(magic); i++, lwi++) {
++				if (lwi==(CDC_DATA_FS_MAX_PACKET_SIZE*CDCSERIAL_MAX_RX_PACKETS)) {
++					lwi = 0;
++				}
++				if (_rb.rx[lwi] != magic[i]) {
++					trigger = 0;
++					break;
++				}
++            }
++
++			/* trigger? */
++			if (trigger) {
++				/* reboot! */
++
++				/* the magic reset sequence is DTR low going edge then host tx string "1EAF" in a single USB frame */
++				NVIC_SystemReset();
++				for(;;) { }
++			}
++		}
++	}
++
++	return l;
++}
++
++
++void CDCSerial::flush(void) {
++	uint32_t c = _wb.wc - _wb.rc;
++
++	updateReadBuffer();
++
++	if (c) {
++		/* bug in usb rtl or core where a full size usb frame, certainly for cdc isn't transmitted to host on in-transaction.
++		 * its odd this is the exact same bug found on nxp k60's, like its shared IP
++		 */
++		uint32_t l = CDC_DATA_FS_MAX_PACKET_SIZE-1;
++		if (c < l) {
++			l = c;
++		}
++
++		/* does buffer ring? */
++		uint32_t rg = sizeof(_wb.tx) - _wb.ri;
++		if (rg < l)  {
++			/* we have to truncate flush */
++			l = rg;
++		}
++
++		/* send... */
++		if (l>0) {
++			if (USBD_OK == CDC_Transmit_FS(&_wb.tx[_wb.ri], l)) {
++				_wb.rc+=l;
++				_wb.ri += l;
++				if (_wb.ri >=sizeof(_wb.tx)) {
++					_wb.ri -= sizeof(_wb.tx);
++				}
++			}
++		}
++	}
++}
++
++
++size_t CDCSerial::write(uint8_t bv) {
++	uint32_t r = 0;	/* full */
++	uint32_t c = _wb.wc - _wb.rc;
++	
++	/* write */
++	if (c < sizeof(_wb.tx)) {
++		_wb.tx[_wb.wi++] = bv;
++		if (_wb.wi >= sizeof(_wb.tx)) {
++			_wb.wi = 0;
++		}
++		_wb.wc++;
++		r = 1;
++	}
++	
++	handleFlush();
++
++	return r;
++}
++
++
++void CDCSerial::handleFlush() {
++	uint32_t c = _wb.wc - _wb.rc, ac = 0;
++	
++	/* flush auto flag */
++	if (c == CDC_DATA_FS_MAX_PACKET_SIZE-1) {
++		ac = 1;
++	}
++	if (_flushType == eFLUSH_AUTOTIMED) {
++		if (ac || (millis() - _lastFlush)) {
++			flush();
++			_lastFlush = millis();
++		}
++	}else if (_flushType == eFLUSH_AUTO && ac) {
++		flush();
++	}else if (_flushType == eFLUSH_AUTOFORCE && c) {
++		flush();
++	}
++}
++
++
++CDCSerial::operator bool() {
++	return getBusConnectionState() && isConnected() && CDC_Get_DTR_State_FS();
++}
++
++
++bool CDCSerial::isConnected() const {
++	/* connected here is usb configured state.  once device configured is usable 
++	 * however that doesn't mean the host user mode application has opened the port??
++	 */
++	return (CDC_Get_Device_State_FS() == USBD_STATE_CONFIGURED)?true:false;
++}
++
++
++void CDCSerial::setBusConnectionState(bool connected) const {
++	if (_pinDisconnect!=-1 && connected) {
++		digitalWrite(_pinDisconnect, LOW);
++	}else {
++		digitalWrite(_pinDisconnect, HIGH);
++	}
++}
++
++
++bool CDCSerial::getBusConnectionState() const {
++	bool s = true;	/* if _pinDisconnect == -1 */
++	
++	if (_pinDisconnect!=-1) {
++		s = !digitalRead(_pinDisconnect) ? true : false;
++	}
++	
++	return s;
++}
++
++
++CDCSerial::eFLUSH CDCSerial::getFlush() const {
++	return _flushType;
++}
++
++
++void CDCSerial::setFlush(eFLUSH f) {
++	_flushType = f;
++}
++
++/* serial monitor instance of CDCSerial */
++#if defined(GIGGLERS_SERIAL)
++#if !defined(CDC_DISCONNECT_PIN)
++#define CDC_DISCONNECT_PIN	34
++#endif
++#if !defined(CDC_FLUSH_TYPE)
++#define CDC_FLUSH_TYPE		CDCSerial::eFLUSH_AUTOFORCE
++#endif
++CDCSerial VSerial(DEVICE_FS, CDC_DISCONNECT_PIN, CDC_FLUSH_TYPE);
++#endif
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/CDCSerial.h ./1.4.1/variants/MAPLEMINI_F103CB/CDCSerial.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/CDCSerial.h	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/CDCSerial.h	2018-12-22 18:28:24.690320400 +0000
+@@ -0,0 +1,212 @@
++/* Copyright (c) 2018, Dave Cox
++**
++** Permission to use, copy, modify, and/or distribute this software for
++** any purpose with or without fee is hereby granted, provided that the
++** above copyright notice and this permission notice appear in all copies.
++**
++** THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
++** WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
++** WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR
++** BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES
++** OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
++** WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
++** ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
++** SOFTWARE.
++*/
++
++#ifndef CDCSerial_h
++#define CDCSerial_h
++
++#include "Stream.h"
++#include "usbd_cdc.h"
++
++#define CDCSERIAL_MAX_TX_PACKETS 3
++#define CDCSERIAL_MAX_RX_PACKETS 3
++
++class CDCSerial : public Stream
++{
++  public:
++	/**
++	 * Flush types available
++	 */
++	typedef enum {
++		eFLUSH_MANUAL		= 0x0,	// caller does everything
++		eFLUSH_AUTOTIMED	= 0x1,	// same as auto + if next write time>1mS then flush after write.  also flush on reads
++		eFLUSH_AUTOFORCE	= 0x2,	// when data send it
++		eFLUSH_AUTO			= 0x4,	// when USB packet worth of data, it is sent
++	}eFLUSH;
++
++	/**
++	 * Constructor
++	 * @param[in] deviceId USB hardware device number (normally only 0 for first)
++	 * @param[in] pinDisconnect arduino pin number for software CDC disconnect (check your circuit).  Can be -1 (not used)
++	 * @param[in] flush type of flush, /ref eFLUSH
++	 */
++    CDCSerial(uint32_t deviceId, int32_t pinDisconnect, eFLUSH flush=eFLUSH_MANUAL);
++    //CDCSerial(uint32_t deviceId, PinName pinDisconnect, eFLUSH flush=eFLUSH_MANUAL);
++
++	/**
++	 * Begin serial
++	 * @param[in] baud serial baud rate (not used internally, accepted to make same as h/w serial framework)
++	 */
++    virtual void begin(unsigned long baud=0);
++
++	/**
++	 * End serial
++	 */
++    virtual void end();
++
++	/**
++	 * Serial data in (via a CDC host OUT transaction).  Use this to determine if any data is present to read
++	 * @return int
++	 * @retval 0 no data
++	 * @retval 1 data.  invoke /ref read
++	 */
++    virtual int available(void);
++	
++	/**
++	 * Peek (read) serial data.  Leaves buffers as is
++	 * @return int character data
++	 */	
++    virtual int peek(void);
++
++	/**
++	 * Read serial data removing from internal buffer
++	 * @return int character data
++	 */	
++    virtual int read(void);
++
++	/**
++	 * Flush serial write data.  Anything from write(...) like print(...) etc. is buffered.  It is most 
++	 * efficient to control flushes because USB transactions via BULK transactions on FULL SPEED device 
++	 * are 64Bytes so simply sending 1character uses up potential bandwidth.  Also OUT frames are 1mS 
++	 * so you limit your data throughput by flushing all the time.  The type of flush can be set via 
++	 * /ref setFlush or constructor.
++	 * @note This function will only send 1 USB OUT frame so multiple calls are required if more than 64
++	 */	
++    virtual void flush(void);
++	
++	/**
++	 * Write serial data, internally buffered
++	 * @param[in] bv character ASCII or byte value to write
++	 * @return int
++	 * @retval 0 full
++	 * @retval 1 written
++	 */	
++    virtual size_t write(uint8_t bv);
++	
++	/**
++	 * Write serial data, internally buffered
++	 * @param[in] bv character ASCII or byte value to write
++	 * @return int
++	 * @retval 0 full
++	 * @retval 1 written
++	 */	
++    inline size_t write(unsigned long n) { return write((uint8_t)n); }
++
++	/**
++	 * Write serial data, internally buffered
++	 * @param[in] bv character ASCII or byte value to write
++	 * @return int
++	 * @retval 0 full
++	 * @retval 1 written
++	 */	
++    inline size_t write(long n) { return write((uint8_t)n); }
++
++	/**
++	 * Write serial data, internally buffered
++	 * @param[in] bv character ASCII or byte value to write
++	 * @return int
++	 * @retval 0 full
++	 * @retval 1 written
++	 */	
++    inline size_t write(unsigned int n) { return write((uint8_t)n); }
++
++	/**
++	 * Write serial data, internally buffered
++	 * @param[in] bv character ASCII or byte value to write
++	 * @return int
++	 * @retval 0 full
++	 * @retval 1 written
++	 */	
++    inline size_t write(int n) { return write((uint8_t)n); }
++	
++	/**
++	 * Conversion operator from CDCSerial to bool.  Used to determine connected status
++	 * @return bool
++	 * @retval false usb not configured or software bus connection state false or dtr not high(1)
++	 * @retval true usb usable
++	 */
++    operator bool();
++
++	/**
++	 * Set bus connection state via software (i/o, a.k.a. CDC disconnect)
++	 * @param[in] connected true or false
++	 */
++	virtual void setBusConnectionState(bool connected) const;
++
++	/**
++	 * Get bus connection state via software (i/o, a.k.a. CDC disconnect).  This will be what was last set via /ref setBusConnectionState
++	 * @return bool
++	 */
++	virtual bool getBusConnectionState() const;
++
++	/**
++	 * Determine if device connected to host.  Ultimately this is based upon if the USB device has been placed in the configured state
++	 * @return bool
++	 */
++	virtual bool isConnected() const;
++
++	/**
++	 * Get flush type
++	 * @return eFLUSH
++	 */
++	virtual eFLUSH getFlush() const;
++
++	/**
++	 * Set flush type
++	 * @param[in] f
++	 */
++	virtual void setFlush(eFLUSH f); 
++	
++    using Print::write; /* pull in write(str) and write(buf, size) from Print */
++
++  protected:
++    virtual uint32_t updateReadBuffer();
++
++	/**
++	 * Handle flush.  Other functions like reading may aid flushing and these invoke this internal function to decide if to assist flushing
++	 * based upon the flush type (scheme) selected
++	 */
++	virtual void handleFlush();
++	
++  protected:
++	eFLUSH	 	_flushType;
++	uint32_t 	_lastFlush;	/* millis() */
++	int32_t 	_pinDisconnect;
++	uint32_t 	_deviceId;
++	struct {
++		/* index and count pairs */
++		uint32_t wi;
++		uint32_t wc;
++		uint32_t ri;
++		uint32_t rc;
++		uint8_t tx[CDCSERIAL_MAX_TX_PACKETS*CDC_DATA_FS_MAX_PACKET_SIZE];
++	}_wb;
++	struct {
++		/* index and count pairs */
++		uint32_t wi;
++		uint32_t wc;
++		uint32_t ri;
++		uint32_t rc;
++		uint8_t rx[(1+CDCSERIAL_MAX_RX_PACKETS)*CDC_DATA_FS_MAX_PACKET_SIZE];	/* CDCSERIAL_MAX_RX_PACKETS+1 so we don't have to worry about circular buffer overrun from lower level */
++	}_rb;
++}; /* CDCSerial */
++
++#if defined(GIGGLERS_SERIAL)
++/* defined in usbd_cdc_if and only in my modded source as no way to tell version of stm32 core release */
++#define Serial VSerial
++extern CDCSerial VSerial;
++#endif
++
++#endif /* !CDCSerial_h */
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/ldscript.ld ./1.4.1/variants/MAPLEMINI_F103CB/ldscript.ld
+--- ./1.4.0/variants/MAPLEMINI_F103CB/ldscript.ld	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/variants/MAPLEMINI_F103CB/ldscript.ld	1970-01-01 01:00:00.000000000 +0100
+@@ -1,167 +0,0 @@
+-/*
+-*****************************************************************************
+-**
+-
+-**  File        : LinkerScript.ld
+-**
+-**  Abstract    : Linker script for STM32F103CBTx Device with
+-**                128KByte FLASH, 20KByte RAM
+-**
+-**                Set heap size, stack size and stack location according
+-**                to application requirements.
+-**
+-**                Set memory bank area and size if external memory is used.
+-**
+-**  Target      : STMicroelectronics STM32
+-**
+-**
+-**  Distribution: The file is distributed as is, without any warranty
+-**                of any kind.
+-**
+-**  (c)Copyright Ac6.
+-**  You may use this file as-is or modify it according to the needs of your
+-**  project. Distribution of this file (unmodified or modified) is not
+-**  permitted. Ac6 permit registered System Workbench for MCU users the
+-**  rights to distribute the assembled, compiled & linked contents of this
+-**  file as part of an application binary file, provided that it is built
+-**  using the System Workbench for MCU toolchain.
+-**
+-*****************************************************************************
+-*/
+-
+-/* Entry Point */
+-ENTRY(Reset_Handler)
+-
+-/* Highest address of the user mode stack */
+-_estack = 0x20005000;    /* end of RAM */
+-/* Generate a link error if heap and stack don't fit into RAM */
+-_Min_Heap_Size = 0x200;      /* required amount of heap  */
+-_Min_Stack_Size = 0x400; /* required amount of stack */
+-
+-/* Specify the memory areas */
+-MEMORY
+-{
+-RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 20K
+-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 128K
+-}
+-
+-/* Define output sections */
+-SECTIONS
+-{
+-  /* The startup code goes first into FLASH */
+-  .isr_vector :
+-  {
+-    . = ALIGN(4);
+-    KEEP(*(.isr_vector)) /* Startup code */
+-    . = ALIGN(4);
+-  } >FLASH
+-
+-  /* The program code and other data goes into FLASH */
+-  .text ALIGN(4):
+-  {
+-    . = ALIGN(4);
+-    *(.text)           /* .text sections (code) */
+-    *(.text*)          /* .text* sections (code) */
+-    *(.glue_7)         /* glue arm to thumb code */
+-    *(.glue_7t)        /* glue thumb to arm code */
+-    *(.eh_frame)
+-
+-    KEEP (*(.init))
+-    KEEP (*(.fini))
+-
+-    . = ALIGN(4);
+-    _etext = .;        /* define a global symbols at end of code */
+-  } >FLASH
+-
+-  /* Constant data goes into FLASH */
+-  .rodata :
+-  {
+-    . = ALIGN(4);
+-    *(.rodata)         /* .rodata sections (constants, strings, etc.) */
+-    *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
+-    . = ALIGN(4);
+-  } >FLASH
+-
+-  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) } >FLASH
+-  .ARM : {
+-    __exidx_start = .;
+-    *(.ARM.exidx*)
+-    __exidx_end = .;
+-  } >FLASH
+-
+-  .preinit_array     :
+-  {
+-    PROVIDE_HIDDEN (__preinit_array_start = .);
+-    KEEP (*(.preinit_array*))
+-    PROVIDE_HIDDEN (__preinit_array_end = .);
+-  } >FLASH
+-  .init_array :
+-  {
+-    PROVIDE_HIDDEN (__init_array_start = .);
+-    KEEP (*(SORT(.init_array.*)))
+-    KEEP (*(.init_array*))
+-    PROVIDE_HIDDEN (__init_array_end = .);
+-  } >FLASH
+-  .fini_array :
+-  {
+-    PROVIDE_HIDDEN (__fini_array_start = .);
+-    KEEP (*(SORT(.fini_array.*)))
+-    KEEP (*(.fini_array*))
+-    PROVIDE_HIDDEN (__fini_array_end = .);
+-  } >FLASH
+-
+-  /* used by the startup to initialize data */
+-  _sidata = LOADADDR(.data);
+-
+-  /* Initialized data sections goes into RAM, load LMA copy after code */
+-  .data : 
+-  {
+-    . = ALIGN(4);
+-    _sdata = .;        /* create a global symbol at data start */
+-    *(.data)           /* .data sections */
+-    *(.data*)          /* .data* sections */
+-
+-    . = ALIGN(4);
+-    _edata = .;        /* define a global symbol at data end */
+-  } >RAM AT> FLASH
+-
+-  
+-  /* Uninitialized data section */
+-  . = ALIGN(4);
+-  .bss :
+-  {
+-    /* This is used by the startup in order to initialize the .bss secion */
+-    _sbss = .;         /* define a global symbol at bss start */
+-    __bss_start__ = _sbss;
+-    *(.bss)
+-    *(.bss*)
+-    *(COMMON)
+-
+-    . = ALIGN(4);
+-    _ebss = .;         /* define a global symbol at bss end */
+-    __bss_end__ = _ebss;
+-  } >RAM
+-
+-  /* User_heap_stack section, used to check that there is enough RAM left */
+-  ._user_heap_stack :
+-  {
+-    . = ALIGN(8);
+-    PROVIDE ( end = . );
+-    PROVIDE ( _end = . );
+-    . = . + _Min_Heap_Size;
+-    . = . + _Min_Stack_Size;
+-    . = ALIGN(8);
+-  } >RAM
+-
+-  
+-
+-  /* Remove information from the standard libraries */
+-  /DISCARD/ :
+-  {
+-    libc.a ( * )
+-    libm.a ( * )
+-    libgcc.a ( * )
+-  }
+-
+-  .ARM.attributes 0 : { *(.ARM.attributes) }
+-}
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/ldscript128.ld ./1.4.1/variants/MAPLEMINI_F103CB/ldscript128.ld
+--- ./1.4.0/variants/MAPLEMINI_F103CB/ldscript128.ld	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/ldscript128.ld	2018-12-22 18:28:24.697320400 +0000
+@@ -0,0 +1,167 @@
++/*
++*****************************************************************************
++**
++
++**  File        : LinkerScript.ld
++**
++**  Abstract    : Linker script for STM32F103CBTx Device with
++**                128KByte FLASH, 20KByte RAM
++**
++**                Set heap size, stack size and stack location according
++**                to application requirements.
++**
++**                Set memory bank area and size if external memory is used.
++**
++**  Target      : STMicroelectronics STM32
++**
++**
++**  Distribution: The file is distributed as is, without any warranty
++**                of any kind.
++**
++**  (c)Copyright Ac6.
++**  You may use this file as-is or modify it according to the needs of your
++**  project. Distribution of this file (unmodified or modified) is not
++**  permitted. Ac6 permit registered System Workbench for MCU users the
++**  rights to distribute the assembled, compiled & linked contents of this
++**  file as part of an application binary file, provided that it is built
++**  using the System Workbench for MCU toolchain.
++**
++*****************************************************************************
++*/
++
++/* Entry Point */
++ENTRY(Reset_Handler)
++
++/* Highest address of the user mode stack */
++_estack = 0x20005000;    /* end of RAM */
++/* Generate a link error if heap and stack don't fit into RAM */
++_Min_Heap_Size = 0x200;      /* required amount of heap  */
++_Min_Stack_Size = 0x400; /* required amount of stack */
++
++/* Specify the memory areas */
++MEMORY
++{
++RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 20K
++FLASH (rx)      : ORIGIN = 0x8002000, LENGTH = 128K
++}
++
++/* Define output sections */
++SECTIONS
++{
++  /* The startup code goes first into FLASH */
++  .isr_vector :
++  {
++    . = ALIGN(4);
++    KEEP(*(.isr_vector)) /* Startup code */
++    . = ALIGN(4);
++  } >FLASH
++
++  /* The program code and other data goes into FLASH */
++  .text ALIGN(4):
++  {
++    . = ALIGN(4);
++    *(.text)           /* .text sections (code) */
++    *(.text*)          /* .text* sections (code) */
++    *(.glue_7)         /* glue arm to thumb code */
++    *(.glue_7t)        /* glue thumb to arm code */
++    *(.eh_frame)
++
++    KEEP (*(.init))
++    KEEP (*(.fini))
++
++    . = ALIGN(4);
++    _etext = .;        /* define a global symbols at end of code */
++  } >FLASH
++
++  /* Constant data goes into FLASH */
++  .rodata :
++  {
++    . = ALIGN(4);
++    *(.rodata)         /* .rodata sections (constants, strings, etc.) */
++    *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
++    . = ALIGN(4);
++  } >FLASH
++
++  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) } >FLASH
++  .ARM : {
++    __exidx_start = .;
++    *(.ARM.exidx*)
++    __exidx_end = .;
++  } >FLASH
++
++  .preinit_array     :
++  {
++    PROVIDE_HIDDEN (__preinit_array_start = .);
++    KEEP (*(.preinit_array*))
++    PROVIDE_HIDDEN (__preinit_array_end = .);
++  } >FLASH
++  .init_array :
++  {
++    PROVIDE_HIDDEN (__init_array_start = .);
++    KEEP (*(SORT(.init_array.*)))
++    KEEP (*(.init_array*))
++    PROVIDE_HIDDEN (__init_array_end = .);
++  } >FLASH
++  .fini_array :
++  {
++    PROVIDE_HIDDEN (__fini_array_start = .);
++    KEEP (*(SORT(.fini_array.*)))
++    KEEP (*(.fini_array*))
++    PROVIDE_HIDDEN (__fini_array_end = .);
++  } >FLASH
++
++  /* used by the startup to initialize data */
++  _sidata = LOADADDR(.data);
++
++  /* Initialized data sections goes into RAM, load LMA copy after code */
++  .data : 
++  {
++    . = ALIGN(4);
++    _sdata = .;        /* create a global symbol at data start */
++    *(.data)           /* .data sections */
++    *(.data*)          /* .data* sections */
++
++    . = ALIGN(4);
++    _edata = .;        /* define a global symbol at data end */
++  } >RAM AT> FLASH
++
++  
++  /* Uninitialized data section */
++  . = ALIGN(4);
++  .bss :
++  {
++    /* This is used by the startup in order to initialize the .bss secion */
++    _sbss = .;         /* define a global symbol at bss start */
++    __bss_start__ = _sbss;
++    *(.bss)
++    *(.bss*)
++    *(COMMON)
++
++    . = ALIGN(4);
++    _ebss = .;         /* define a global symbol at bss end */
++    __bss_end__ = _ebss;
++  } >RAM
++
++  /* User_heap_stack section, used to check that there is enough RAM left */
++  ._user_heap_stack :
++  {
++    . = ALIGN(8);
++    PROVIDE ( end = . );
++    PROVIDE ( _end = . );
++    . = . + _Min_Heap_Size;
++    . = . + _Min_Stack_Size;
++    . = ALIGN(8);
++  } >RAM
++
++  
++
++  /* Remove information from the standard libraries */
++  /DISCARD/ :
++  {
++    libc.a ( * )
++    libm.a ( * )
++    libgcc.a ( * )
++  }
++
++  .ARM.attributes 0 : { *(.ARM.attributes) }
++}
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/ldscript64.ld ./1.4.1/variants/MAPLEMINI_F103CB/ldscript64.ld
+--- ./1.4.0/variants/MAPLEMINI_F103CB/ldscript64.ld	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/ldscript64.ld	2018-12-22 18:28:24.700320400 +0000
+@@ -0,0 +1,167 @@
++/*
++*****************************************************************************
++**
++
++**  File        : LinkerScript.ld
++**
++**  Abstract    : Linker script for STM32F103C8Tx Device with
++**                64KByte FLASH, 20KByte RAM
++**
++**                Set heap size, stack size and stack location according
++**                to application requirements.
++**
++**                Set memory bank area and size if external memory is used.
++**
++**  Target      : STMicroelectronics STM32
++**
++**
++**  Distribution: The file is distributed as is, without any warranty
++**                of any kind.
++**
++**  (c)Copyright Ac6.
++**  You may use this file as-is or modify it according to the needs of your
++**  project. Distribution of this file (unmodified or modified) is not
++**  permitted. Ac6 permit registered System Workbench for MCU users the
++**  rights to distribute the assembled, compiled & linked contents of this
++**  file as part of an application binary file, provided that it is built
++**  using the System Workbench for MCU toolchain.
++**
++*****************************************************************************
++*/
++
++/* Entry Point */
++ENTRY(Reset_Handler)
++
++/* Highest address of the user mode stack */
++_estack = 0x20005000;    /* end of RAM */
++/* Generate a link error if heap and stack don't fit into RAM */
++_Min_Heap_Size = 0x200;      /* required amount of heap  */
++_Min_Stack_Size = 0x400; /* required amount of stack */
++
++/* Specify the memory areas */
++MEMORY
++{
++RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 20K
++FLASH (rx)      : ORIGIN = 0x8002000, LENGTH = 64K
++}
++
++/* Define output sections */
++SECTIONS
++{
++  /* The startup code goes first into FLASH */
++  .isr_vector :
++  {
++    . = ALIGN(4);
++    KEEP(*(.isr_vector)) /* Startup code */
++    . = ALIGN(4);
++  } >FLASH
++
++  /* The program code and other data goes into FLASH */
++  .text ALIGN(4):
++  {
++    . = ALIGN(4);
++    *(.text)           /* .text sections (code) */
++    *(.text*)          /* .text* sections (code) */
++    *(.glue_7)         /* glue arm to thumb code */
++    *(.glue_7t)        /* glue thumb to arm code */
++    *(.eh_frame)
++
++    KEEP (*(.init))
++    KEEP (*(.fini))
++
++    . = ALIGN(4);
++    _etext = .;        /* define a global symbols at end of code */
++  } >FLASH
++
++  /* Constant data goes into FLASH */
++  .rodata :
++  {
++    . = ALIGN(4);
++    *(.rodata)         /* .rodata sections (constants, strings, etc.) */
++    *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
++    . = ALIGN(4);
++  } >FLASH
++
++  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) } >FLASH
++  .ARM : {
++    __exidx_start = .;
++    *(.ARM.exidx*)
++    __exidx_end = .;
++  } >FLASH
++
++  .preinit_array     :
++  {
++    PROVIDE_HIDDEN (__preinit_array_start = .);
++    KEEP (*(.preinit_array*))
++    PROVIDE_HIDDEN (__preinit_array_end = .);
++  } >FLASH
++  .init_array :
++  {
++    PROVIDE_HIDDEN (__init_array_start = .);
++    KEEP (*(SORT(.init_array.*)))
++    KEEP (*(.init_array*))
++    PROVIDE_HIDDEN (__init_array_end = .);
++  } >FLASH
++  .fini_array :
++  {
++    PROVIDE_HIDDEN (__fini_array_start = .);
++    KEEP (*(SORT(.fini_array.*)))
++    KEEP (*(.fini_array*))
++    PROVIDE_HIDDEN (__fini_array_end = .);
++  } >FLASH
++
++  /* used by the startup to initialize data */
++  _sidata = LOADADDR(.data);
++
++  /* Initialized data sections goes into RAM, load LMA copy after code */
++  .data : 
++  {
++    . = ALIGN(4);
++    _sdata = .;        /* create a global symbol at data start */
++    *(.data)           /* .data sections */
++    *(.data*)          /* .data* sections */
++
++    . = ALIGN(4);
++    _edata = .;        /* define a global symbol at data end */
++  } >RAM AT> FLASH
++
++  
++  /* Uninitialized data section */
++  . = ALIGN(4);
++  .bss :
++  {
++    /* This is used by the startup in order to initialize the .bss secion */
++    _sbss = .;         /* define a global symbol at bss start */
++    __bss_start__ = _sbss;
++    *(.bss)
++    *(.bss*)
++    *(COMMON)
++
++    . = ALIGN(4);
++    _ebss = .;         /* define a global symbol at bss end */
++    __bss_end__ = _ebss;
++  } >RAM
++
++  /* User_heap_stack section, used to check that there is enough RAM left */
++  ._user_heap_stack :
++  {
++    . = ALIGN(8);
++    PROVIDE ( end = . );
++    PROVIDE ( _end = . );
++    . = . + _Min_Heap_Size;
++    . = . + _Min_Stack_Size;
++    . = ALIGN(8);
++  } >RAM
++
++  
++
++  /* Remove information from the standard libraries */
++  /DISCARD/ :
++  {
++    libc.a ( * )
++    libm.a ( * )
++    libgcc.a ( * )
++  }
++
++  .ARM.attributes 0 : { *(.ARM.attributes) }
++}
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/stm32f1xx_hal_conf.h ./1.4.1/variants/MAPLEMINI_F103CB/stm32f1xx_hal_conf.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/stm32f1xx_hal_conf.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/variants/MAPLEMINI_F103CB/stm32f1xx_hal_conf.h	2018-12-22 18:28:24.702320400 +0000
+@@ -69,7 +69,7 @@
+ /*#define HAL_NAND_MODULE_ENABLED*/
+ /*#define HAL_NOR_MODULE_ENABLED*/
+ /*#define HAL_PCCARD_MODULE_ENABLED*/
+-/*#define HAL_PCD_MODULE_ENABLED*/
++#define HAL_PCD_MODULE_ENABLED
+ #define HAL_PWR_MODULE_ENABLED
+ #define HAL_RCC_MODULE_ENABLED
+ #define HAL_RTC_MODULE_ENABLED
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.c ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.c
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.c	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.c	2018-12-22 18:28:24.707320400 +0000
+@@ -0,0 +1,483 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_cdc_if.c
++  * @version        : v2.0_Cube
++  * @brief          : Usb device for Virtual Com Port.
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++
++/* Includes ------------------------------------------------------------------*/
++#include "usbd_cdc.h"
++#include "usbd_cdc_if.h"
++#include "usbd_conf.h"
++
++/* USER CODE BEGIN INCLUDE */
++
++/* USER CODE END INCLUDE */
++
++/* Private typedef -----------------------------------------------------------*/
++/* Private define ------------------------------------------------------------*/
++/* Private macro -------------------------------------------------------------*/
++
++/* USER CODE BEGIN PV */
++/* Private variables ---------------------------------------------------------*/
++
++/* USER CODE END PV */
++
++/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
++  * @brief Usb device library.
++  * @{
++  */
++
++/** @addtogroup USBD_CDC_IF
++  * @{
++  */
++
++/** @defgroup USBD_CDC_IF_Private_TypesDefinitions USBD_CDC_IF_Private_TypesDefinitions
++  * @brief Private types.
++  * @{
++  */
++
++/* USER CODE BEGIN PRIVATE_TYPES */
++
++#define CDC_MAX_RX_PACKETS			5
++
++#define USBD_CONTROL_LINE_DTR       (0x01)
++#define USBD_CONTROL_LINE_RTS       (0x02)
++
++typedef struct {
++	struct {
++		uint32_t	data;
++		uint32_t	prevData;
++		uint32_t	edge;
++	}lineCtrl;
++	struct {
++		union {
++			uint8_t b[8];
++			uint32_t u16[4];
++			uint32_t u32[2];
++		};
++	}lineCoding;
++	struct {
++		uint32_t next;
++		struct {
++			uint32_t valid;
++			uint32_t length;
++			uint8_t buffer[USB_FS_MAX_PACKET_SIZE];
++		}pk[CDC_MAX_RX_PACKETS];
++	}rx;
++}CDCData_t;
++
++/* USER CODE END PRIVATE_TYPES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Private_Defines USBD_CDC_IF_Private_Defines
++  * @brief Private defines.
++  * @{
++  */
++  
++/* USER CODE BEGIN PRIVATE_DEFINES */
++/* Define size for the receive and transmit buffer over CDC */
++/* It's up to user to redefine and/or remove those define */
++/*#if !defined(APP_RX_DATA_SIZE)
++#define APP_RX_DATA_SIZE  256
++#endif
++#if !defined(APP_TX_DATA_SIZE)
++#define APP_TX_DATA_SIZE  256
++#endif*/
++/* USER CODE END PRIVATE_DEFINES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Private_Macros USBD_CDC_IF_Private_Macros
++  * @brief Private macros.
++  * @{
++  */
++
++/* USER CODE BEGIN PRIVATE_MACRO */
++
++/* USER CODE END PRIVATE_MACRO */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Private_Variables USBD_CDC_IF_Private_Variables
++  * @brief Private variables.
++  * @{
++  */
++/* Create buffer for reception and transmission           */
++/* It's up to user to redefine and/or remove those define */
++/** Received data over USB are stored in this buffer      */
++//uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
++
++/** Data to send over USB CDC are stored in this buffer   */
++//uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
++
++/* USER CODE BEGIN PRIVATE_VARIABLES */
++
++volatile CDCData_t gCDCData;	/* bss zero init required */
++
++
++/* USER CODE END PRIVATE_VARIABLES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Exported_Variables USBD_CDC_IF_Exported_Variables
++  * @brief Public variables.
++  * @{
++  */
++
++extern USBD_HandleTypeDef hUsbDeviceFS;
++
++/* USER CODE BEGIN EXPORTED_VARIABLES */
++
++/* USER CODE END EXPORTED_VARIABLES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Private_FunctionPrototypes USBD_CDC_IF_Private_FunctionPrototypes
++  * @brief Private functions declaration.
++  * @{
++  */
++
++static int8_t CDC_Init_FS(void);
++static int8_t CDC_DeInit_FS(void);
++static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length, uint16_t wValue, uint16_t wIndex);
++
++/* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
++
++/* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
++
++/**
++  * @}
++  */
++
++USBD_CDC_ItfTypeDef USBD_Interface_fops_FS =
++{
++  CDC_Init_FS,
++  CDC_DeInit_FS,
++  CDC_Control_FS,
++  CDC_Receive_FS
++};
++
++
++/* Private functions ---------------------------------------------------------*/
++/**
++  * @brief  Initializes the CDC media low layer over the FS USB IP
++  * @retval USBD_OK if all operations are OK else USBD_FAIL
++  */
++static int8_t CDC_Init_FS(void)
++{
++//  static uint8_t rxBuffer[USB_FS_MAX_PACKET_SIZE];
++  /* USER CODE BEGIN 3 */
++  /* Set Application Buffers */
++  USBD_CDC_SetTxBuffer(&hUsbDeviceFS, NULL, 0);
++  gCDCData.rx.next = 0;
++  for(uint32_t i = 0; i<CDC_MAX_RX_PACKETS; i++) {
++	gCDCData.rx.pk[i].valid = 0;
++	gCDCData.rx.pk[i].length = 0;
++  }
++  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &gCDCData.rx.pk[gCDCData.rx.next].buffer);
++  return (USBD_OK);
++  /* USER CODE END 3 */
++}
++
++/**
++  * @brief  DeInitializes the CDC media low layer
++  * @retval USBD_OK if all operations are OK else USBD_FAIL
++  */
++static int8_t CDC_DeInit_FS(void)
++{
++  /* USER CODE BEGIN 4 */
++  return (USBD_OK);
++  /* USER CODE END 4 */
++}
++
++
++/**
++  * @brief  Manage the CDC class requests
++  * @param  cmd: Command code
++  * @param  pbuf: Buffer containing command data (request parameters)
++  * @param  length: Number of data to be sent (in bytes)
++  * @param  uin16_t wValue: Field from request
++  * @param  uint16_t wIndex: Field from request
++  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
++  */
++static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length, uint16_t wValue, uint16_t wIndex)
++{
++  /* USER CODE BEGIN 5 */
++  switch(cmd)
++  {
++    case CDC_SEND_ENCAPSULATED_COMMAND:
++    break;
++
++    case CDC_GET_ENCAPSULATED_RESPONSE:
++    break;
++
++    case CDC_SET_COMM_FEATURE:
++    break;
++
++    case CDC_GET_COMM_FEATURE:
++    break;
++
++    case CDC_CLEAR_COMM_FEATURE:
++    break;
++
++  /*******************************************************************************/
++  /* Line Coding Structure                                                       */
++  /*-----------------------------------------------------------------------------*/
++  /* Offset | Field       | Size | Value  | Description                          */
++  /* 0      | dwDTERate   |   4  | Number |Data terminal rate, in bits per second*/
++  /* 4      | bCharFormat |   1  | Number | Stop bits                            */
++  /*                                        0 - 1 Stop bit                       */
++  /*                                        1 - 1.5 Stop bits                    */
++  /*                                        2 - 2 Stop bits                      */
++  /* 5      | bParityType |  1   | Number | Parity                               */
++  /*                                        0 - None                             */
++  /*                                        1 - Odd                              */
++  /*                                        2 - Even                             */
++  /*                                        3 - Mark                             */
++  /*                                        4 - Space                            */
++  /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
++  /*******************************************************************************/
++    case CDC_SET_LINE_CODING:
++	    memcpy(&gCDCData.lineCoding.b[0], pbuf, 7);
++        break;
++    case CDC_GET_LINE_CODING:
++        memcpy(pbuf, &gCDCData.lineCoding.b[0], 7);
++        break;
++
++    case CDC_SET_CONTROL_LINE_STATE:
++		gCDCData.lineCtrl.prevData = gCDCData.lineCtrl.data;
++        gCDCData.lineCtrl.data = (uint8_t)wValue;	/* according to CDC1.2 specification only LSb0 (DTR) and LSb1 (RTS) are used */
++
++		/* current low, previous high? */
++		if ( (0 == (gCDCData.lineCtrl.data & USBD_CONTROL_LINE_DTR)) &&
++			(1 == (gCDCData.lineCtrl.prevData & USBD_CONTROL_LINE_DTR)))
++		{
++			/* low going edge seen */
++			gCDCData.lineCtrl.edge |= USBD_CONTROL_LINE_DTR;
++		}
++        break;
++
++    case CDC_SEND_BREAK:
++    break;
++
++  default:
++    break;
++  }
++
++  return (USBD_OK);
++  /* USER CODE END 5 */
++}
++
++
++/**
++  * @brief  Get device state.  A macro from usbd_def.h and includes USBD_STATE_DEFAULT
++  * USBD_STATE_ADDRESSED, USBD_STATE_CONFIGURED, USBD_STATE_SUSPENDED.
++  * @return uint32_t state.  macros USBD_STATE_xxxx
++  */
++uint32_t CDC_Get_Device_State_FS(void)
++{
++    return (uint32_t)hUsbDeviceFS.dev_state;
++}
++
++
++/**
++  * @brief  Get DTR line state last received from host
++  * @return uint32_t 0 (clear) or 1 (set)
++  */
++uint32_t CDC_Get_DTR_State_FS(void)
++{
++	return ((gCDCData.lineCtrl.data & USBD_CONTROL_LINE_DTR) != 0);
++}
++
++
++/**
++  * @brief  Get RTS line state last received from host
++  * @return uint32_t 0 (clear) or 1 (set)
++  */
++uint32_t CDC_Get_RTS_State_FS(void)
++{
++	return ((gCDCData.lineCtrl.data & USBD_CONTROL_LINE_RTS) != 0);
++}
++
++
++/**
++  * @brief  Query DTR line low edge seen condition.  Once an edge seen it must be cleared by 
++  * invoking @ref CDC_Clear_DTR_Low_Edge_FS
++  * @return uint32_t 0 (no) or 1 (yes)
++  */
++uint32_t CDC_Seen_DTR_Low_Edge_FS(void)
++{
++	return (gCDCData.lineCtrl.edge & USBD_CONTROL_LINE_DTR) ? 1 : 0;
++}
++
++
++/**
++  * @brief  Clear DTR line low edge condition
++  */
++void CDC_Clear_DTR_Low_Edge_FS(void)
++{
++	gCDCData.lineCtrl.edge &= ~USBD_CONTROL_LINE_DTR;	/* clear */
++}
++
++
++/**
++  * @brief  Data received over USB OUT endpoint are sent over CDC interface
++  *         through this function.
++  *
++  *         @note
++  *         This function will block any OUT packet reception on USB endpoint
++  *         untill exiting this function. If you exit this function before transfer
++  *         is complete on CDC interface (ie. using DMA controller) it will result
++  *         in receiving more data while previous ones are still not sent.
++  *
++  * @param  Buf: Buffer of data to be received
++  * @param  Len: Number of data received (in bytes)
++  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
++  */
++int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
++{
++  uint32_t c = gCDCData.rx.next, cn;
++  /* USER CODE BEGIN 6 */
++  
++  // set current receive frame length
++  gCDCData.rx.pk[c].length = *Len;
++  
++  // setup next receive frame buffer
++  cn = c + 1;
++  if (cn>=CDC_MAX_RX_PACKETS) {
++	  cn = 0;
++  }
++  gCDCData.rx.pk[cn].valid = 0;
++  gCDCData.rx.pk[cn].length = 0;
++  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &gCDCData.rx.pk[cn].buffer);
++  gCDCData.rx.next = cn;
++  gCDCData.rx.pk[c].valid = 1;	// indicate current receive frame valid!
++
++  // setup next xfer read of a single usb frame (full speed 64Bytes for bulk endpoint)  
++  USBD_CDC_ReceivePacket(&hUsbDeviceFS);  
++  
++  return (USBD_OK);
++  /* USER CODE END 6 */
++}
++
++
++/**
++  * @brief  Copy receive data (if any) into user supplied buffer
++  *
++  * @param[out]  uint8_t * frameBuffer.  Size should be atleast USB_FS_MAX_PACKET_SIZE
++  * @return uint32_t length (Bytes)
++  */
++uint32_t CDC_Copy_Receive_FS(uint8_t* frameBuffer) {
++	uint32_t i = gCDCData.rx.next, c = 0, l = 0;
++	
++	do {
++		if (i==0) {
++			i = CDC_MAX_RX_PACKETS - 1;
++		}else {
++			i--;
++		}
++		if (gCDCData.rx.pk[i].valid) {
++			l = gCDCData.rx.pk[i].length;
++			gCDCData.rx.pk[i].length = 0; 
++			memcpy(frameBuffer, gCDCData.rx.pk[i].buffer, l);
++			gCDCData.rx.pk[i].valid = 0;
++			break;
++		}
++	}while(++c<=CDC_MAX_RX_PACKETS);
++	
++	return l;
++}
++
++
++/**
++  * @brief  CDC_Transmit_FS
++  *         Data to send over USB IN endpoint are sent over CDC interface
++  *         through this function.
++  *         @note
++  *
++  *
++  * @param  Buf: Buffer of data to be sent
++  * @param  Len: Number of data to be sent (in bytes)
++  * @retval USBD_OK if all operations are OK else USBD_FAIL or USBD_BUSY
++  */
++uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
++{
++  uint8_t result = USBD_OK;
++  /* USER CODE BEGIN 7 */
++  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
++  if (hcdc->TxState != 0) {
++    return USBD_BUSY;
++  }
++  USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
++  result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
++  /* USER CODE END 7 */
++  return result;
++}
++
++/* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
++
++/* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.h ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.h	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_if.h	2018-12-22 18:28:24.711320400 +0000
+@@ -0,0 +1,166 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_cdc_if.h
++  * @version        : v2.0_Cube
++  * @brief          : Header for usbd_cdc_if.c file.
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++
++/* Define to prevent recursive inclusion -------------------------------------*/
++#ifndef __USBD_CDC_IF_H__
++#define __USBD_CDC_IF_H__
++
++#ifdef __cplusplus
++ extern "C" {
++#endif
++
++/* Includes ------------------------------------------------------------------*/
++#include "usbd_cdc.h"
++
++/* USER CODE BEGIN INCLUDE */
++
++/* USER CODE END INCLUDE */
++
++/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
++  * @brief For Usb device.
++  * @{
++  */
++  
++/** @defgroup USBD_CDC_IF USBD_CDC_IF
++  * @brief Usb VCP device module
++  * @{
++  */ 
++
++/** @defgroup USBD_CDC_IF_Exported_Defines USBD_CDC_IF_Exported_Defines
++  * @brief Defines.
++  * @{
++  */
++/* USER CODE BEGIN EXPORTED_DEFINES */
++
++#define CDC_MAPLEMINI_PREVUSB_RELEASE
++
++/* USER CODE END EXPORTED_DEFINES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Exported_Types USBD_CDC_IF_Exported_Types
++  * @brief Types.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_TYPES */
++
++/* USER CODE END EXPORTED_TYPES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Exported_Macros USBD_CDC_IF_Exported_Macros
++  * @brief Aliases.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_MACRO */
++
++/* USER CODE END EXPORTED_MACRO */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Exported_Variables USBD_CDC_IF_Exported_Variables
++  * @brief Public variables.
++  * @{
++  */
++
++/** CDC Interface callback. */
++extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
++
++/* USER CODE BEGIN EXPORTED_VARIABLES */
++
++/* USER CODE END EXPORTED_VARIABLES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CDC_IF_Exported_FunctionsPrototype USBD_CDC_IF_Exported_FunctionsPrototype
++  * @brief Public functions declaration.
++  * @{
++  */
++
++uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
++int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len);
++uint32_t CDC_Copy_Receive_FS(uint8_t* frameBuffer);
++uint32_t CDC_Get_Device_State_FS(void);
++uint32_t CDC_Get_DTR_State_FS(void);
++uint32_t CDC_Get_RTS_State_FS(void);
++uint32_t CDC_Seen_DTR_Low_Edge_FS(void);
++void CDC_Clear_DTR_Low_Edge_FS(void);
++/* USER CODE BEGIN EXPORTED_FUNCTIONS */
++
++/* USER CODE END EXPORTED_FUNCTIONS */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __USBD_CDC_IF_H__ */
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_src.c ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_src.c
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_cdc_src.c	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_cdc_src.c	2018-12-22 18:28:24.713320400 +0000
+@@ -0,0 +1,5 @@
++#include "usbd_conf.h"
++#include "usbd_cdc_if.h"
++#include "usbd_cdc.h"
++
++#include "usbd_cdc.c"
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_conf.c ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_conf.c
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_conf.c	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_conf.c	2018-12-22 18:53:16.890320400 +0000
+@@ -0,0 +1,789 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_conf.c
++  * @version        : v2.0_Cube
++  * @brief          : This file implements the board support package for the USB device library
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++
++/* Includes ------------------------------------------------------------------*/
++#include "stm32f1xx.h"
++#include "stm32f1xx_hal.h"
++#include "usbd_def.h"
++#include "usbd_core.h"
++#include "usbd_cdc.h"
++#include "usbd_conf.h"
++#include "hw_config.h"
++
++/* USER CODE BEGIN Includes */
++
++#if defined(USBD_USE_CDC) && defined(USE_USB_FS) && defined(USBCON)
++
++/* USER CODE END Includes */
++
++/* Private typedef -----------------------------------------------------------*/
++/* Private define ------------------------------------------------------------*/
++/* Private macro -------------------------------------------------------------*/
++
++/* USER CODE BEGIN PV */
++/* Private variables ---------------------------------------------------------*/
++
++/* USER CODE END PV */
++
++PCD_HandleTypeDef hpcd_USB_FS;
++//void Error_Handler(void);
++
++/* USER CODE BEGIN 0 */
++
++/* USER CODE END 0 */
++
++/* USER CODE BEGIN PFP */
++/* Private function prototypes -----------------------------------------------*/
++
++/* USER CODE END PFP */
++
++/* Private functions ---------------------------------------------------------*/
++
++/* USER CODE BEGIN 1 */
++
++/* USER CODE END 1 */
++
++void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state);
++
++/*******************************************************************************
++                       LL Driver Callbacks (PCD -> USB Device Library)
++*******************************************************************************/
++/* MSP Init */
++
++void HAL_PCD_MspInit(PCD_HandleTypeDef* pcdHandle)
++{
++  if(pcdHandle->Instance==USB)
++  {
++  /* USER CODE BEGIN USB_MspInit 0 */
++
++  /* USER CODE END USB_MspInit 0 */
++    /* Peripheral clock enable */
++    __HAL_RCC_USB_CLK_ENABLE();
++
++    /* Peripheral interrupt init */
++    HAL_NVIC_SetPriority(USB_LP_CAN1_RX0_IRQn, 0, 0);
++    HAL_NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
++  /* USER CODE BEGIN USB_MspInit 1 */
++
++  /* USER CODE END USB_MspInit 1 */
++  }
++}
++
++void HAL_PCD_MspDeInit(PCD_HandleTypeDef* pcdHandle)
++{
++  if(pcdHandle->Instance==USB)
++  {
++  /* USER CODE BEGIN USB_MspDeInit 0 */
++
++  /* USER CODE END USB_MspDeInit 0 */
++    /* Peripheral clock disable */
++    __HAL_RCC_USB_CLK_DISABLE();
++
++    /* Peripheral interrupt Deinit*/
++    HAL_NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
++
++  /* USER CODE BEGIN USB_MspDeInit 1 */
++
++  /* USER CODE END USB_MspDeInit 1 */
++  }
++}
++
++/**
++  * @brief  Setup stage callback
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd)
++{
++  USBD_LL_SetupStage((USBD_HandleTypeDef*)hpcd->pData, (uint8_t *)hpcd->Setup);
++}
++
++/**
++  * @brief  Data Out stage callback.
++  * @param  hpcd: PCD handle
++  * @param  epnum: Endpoint number
++  * @retval None
++  */
++void HAL_PCD_DataOutStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
++{
++  USBD_LL_DataOutStage((USBD_HandleTypeDef*)hpcd->pData, epnum, hpcd->OUT_ep[epnum].xfer_buff);
++}
++
++/**
++  * @brief  Data In stage callback.
++  * @param  hpcd: PCD handle
++  * @param  epnum: Endpoint number
++  * @retval None
++  */
++void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
++{
++  USBD_LL_DataInStage((USBD_HandleTypeDef*)hpcd->pData, epnum, hpcd->IN_ep[epnum].xfer_buff);
++}
++
++/**
++  * @brief  SOF callback.
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
++{
++  USBD_LL_SOF((USBD_HandleTypeDef*)hpcd->pData);
++}
++
++/**
++  * @brief  Reset callback.
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
++{ 
++  USBD_SpeedTypeDef speed = USBD_SPEED_FULL;
++
++  /* Set USB current speed. */
++  switch (hpcd->Init.speed)
++  {
++  case PCD_SPEED_FULL:
++    speed = USBD_SPEED_FULL;
++    break;
++	
++  default:
++    speed = USBD_SPEED_FULL;
++    break;    
++  }
++  USBD_LL_SetSpeed((USBD_HandleTypeDef*)hpcd->pData, speed);
++  
++  /* Reset Device. */
++  USBD_LL_Reset((USBD_HandleTypeDef*)hpcd->pData);
++}
++
++/**
++  * @brief  Suspend callback.
++  * When Low power mode is enabled the debug cannot be used (IAR, Keil doesn't support it)
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
++{
++  /* Inform USB library that core enters in suspend Mode. */
++  USBD_LL_Suspend((USBD_HandleTypeDef*)hpcd->pData);
++  /* Enter in STOP mode. */
++  /* USER CODE BEGIN 2 */
++  if (hpcd->Init.low_power_enable)
++  {
++    /* Set SLEEPDEEP bit and SleepOnExit of Cortex System Control Register. */
++    SCB->SCR |= (uint32_t)((uint32_t)(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk));
++  }
++  /* USER CODE END 2 */
++}
++
++/**
++  * @brief  Resume callback.
++  * When Low power mode is enabled the debug cannot be used (IAR, Keil doesn't support it)
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
++{
++  /* USER CODE BEGIN 3 */
++
++  /* USER CODE END 3 */
++  USBD_LL_Resume((USBD_HandleTypeDef*)hpcd->pData);
++}
++
++/**
++  * @brief  ISOOUTIncomplete callback.
++  * @param  hpcd: PCD handle
++  * @param  epnum: Endpoint number
++  * @retval None
++  */
++void HAL_PCD_ISOOUTIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
++{
++  USBD_LL_IsoOUTIncomplete((USBD_HandleTypeDef*)hpcd->pData, epnum);
++}
++
++/**
++  * @brief  ISOINIncomplete callback.
++  * @param  hpcd: PCD handle
++  * @param  epnum: Endpoint number
++  * @retval None
++  */
++void HAL_PCD_ISOINIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
++{
++  USBD_LL_IsoINIncomplete((USBD_HandleTypeDef*)hpcd->pData, epnum);
++}
++
++/**
++  * @brief  Connect callback.
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_ConnectCallback(PCD_HandleTypeDef *hpcd)
++{
++  USBD_LL_DevConnected((USBD_HandleTypeDef*)hpcd->pData);
++}
++
++/**
++  * @brief  Disconnect callback.
++  * @param  hpcd: PCD handle
++  * @retval None
++  */
++void HAL_PCD_DisconnectCallback(PCD_HandleTypeDef *hpcd)
++{
++  USBD_LL_DevDisconnected((USBD_HandleTypeDef*)hpcd->pData);
++}
++
++/*******************************************************************************
++                       LL Driver Interface (USB Device Library --> PCD)
++*******************************************************************************/
++
++/**
++  * @brief  Initializes the low level portion of the device driver.
++  * @param  pdev: Device handle
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
++{
++  /* Init USB Ip. */
++  /* Link the driver to the stack. */
++  hpcd_USB_FS.pData = pdev;
++  pdev->pData = &hpcd_USB_FS;
++
++  hpcd_USB_FS.Instance = USB;
++  hpcd_USB_FS.Init.dev_endpoints = 8;
++  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
++  hpcd_USB_FS.Init.ep0_mps = DEP0CTL_MPS_8;
++  hpcd_USB_FS.Init.low_power_enable = DISABLE;
++  hpcd_USB_FS.Init.lpm_enable = DISABLE;
++  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
++  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
++  {
++    Error_Handler( );
++  }
++
++  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x00 , PCD_SNG_BUF, 0x18);
++  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x80 , PCD_SNG_BUF, 0x58);
++  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x81 , PCD_SNG_BUF, 0xC0);
++  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x01 , PCD_SNG_BUF, 0x110);
++  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x82 , PCD_SNG_BUF, 0x100);
++  return USBD_OK;
++}
++
++/**
++  * @brief  De-Initializes the low level portion of the device driver.
++  * @param  pdev: Device handle
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_DeInit(USBD_HandleTypeDef *pdev)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++
++  hal_status = HAL_PCD_DeInit(pdev->pData);
++
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status; 
++}
++
++/**
++  * @brief  Starts the low level portion of the device driver.
++  * @param  pdev: Device handle
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_Start(USBD_HandleTypeDef *pdev)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++ 
++  hal_status = HAL_PCD_Start(pdev->pData);
++     
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;
++}
++
++/**
++  * @brief  Stops the low level portion of the device driver.
++  * @param  pdev: Device handle
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_Stop(USBD_HandleTypeDef *pdev)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++
++  hal_status = HAL_PCD_Stop(pdev->pData);
++
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;
++}
++
++/**
++  * @brief  Opens an endpoint of the low level driver.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @param  ep_type: Endpoint type
++  * @param  ep_mps: Endpoint max packet size
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uint8_t ep_type, uint16_t ep_mps)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++
++  hal_status = HAL_PCD_EP_Open(pdev->pData, ep_addr, ep_mps, ep_type);
++
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;
++}
++
++/**
++  * @brief  Closes an endpoint of the low level driver.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++  
++  hal_status = HAL_PCD_EP_Close(pdev->pData, ep_addr);
++      
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;  
++}
++
++/**
++  * @brief  Flushes an endpoint of the Low Level Driver.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_FlushEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++  
++  hal_status = HAL_PCD_EP_Flush(pdev->pData, ep_addr);
++      
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;  
++}
++
++/**
++  * @brief  Sets a Stall condition on an endpoint of the Low Level Driver.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_StallEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++  
++  hal_status = HAL_PCD_EP_SetStall(pdev->pData, ep_addr);
++
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;  
++}
++
++/**
++  * @brief  Clears a Stall condition on an endpoint of the Low Level Driver.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_ClearStallEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++  
++  hal_status = HAL_PCD_EP_ClrStall(pdev->pData, ep_addr);  
++     
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status; 
++}
++
++/**
++  * @brief  Returns Stall condition.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval Stall (1: Yes, 0: No)
++  */
++uint8_t USBD_LL_IsStallEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  PCD_HandleTypeDef *hpcd = (PCD_HandleTypeDef*) pdev->pData;
++  
++  if((ep_addr & 0x80) == 0x80)
++  {
++    return hpcd->IN_ep[ep_addr & 0x7F].is_stall; 
++  }
++  else
++  {
++    return hpcd->OUT_ep[ep_addr & 0x7F].is_stall; 
++  }
++}
++
++/**
++  * @brief  Assigns a USB address to the device.
++  * @param  pdev: Device handle
++  * @param  dev_addr: Device address
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev, uint8_t dev_addr)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++  
++  hal_status = HAL_PCD_SetAddress(pdev->pData, dev_addr);
++     
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;  
++}
++
++/**
++  * @brief  Transmits data over an endpoint.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @param  pbuf: Pointer to data to be sent
++  * @param  size: Data size    
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uint8_t *pbuf, uint16_t size)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++
++  hal_status = HAL_PCD_EP_Transmit(pdev->pData, ep_addr, pbuf, size);
++     
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status;    
++}
++
++/**
++  * @brief  Prepares an endpoint for reception.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @param  pbuf: Pointer to data to be received
++  * @param  size: Data size
++  * @retval USBD status
++  */
++USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uint8_t *pbuf, uint16_t size)
++{
++  HAL_StatusTypeDef hal_status = HAL_OK;
++  USBD_StatusTypeDef usb_status = USBD_OK;
++
++  hal_status = HAL_PCD_EP_Receive(pdev->pData, ep_addr, pbuf, size);
++     
++  switch (hal_status) {
++    case HAL_OK :
++      usb_status = USBD_OK;
++    break;
++    case HAL_ERROR :
++      usb_status = USBD_FAIL;
++    break;
++    case HAL_BUSY :
++      usb_status = USBD_BUSY;
++    break;
++    case HAL_TIMEOUT :
++      usb_status = USBD_FAIL;
++    break;
++    default :
++      usb_status = USBD_FAIL;
++    break;
++  }
++  return usb_status; 
++}
++
++/**
++  * @brief  Returns the last transfered packet size.
++  * @param  pdev: Device handle
++  * @param  ep_addr: Endpoint number
++  * @retval Recived Data Size
++  */
++uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
++{
++  return HAL_PCD_EP_GetRxCount((PCD_HandleTypeDef*) pdev->pData, ep_addr);
++}
++
++
++/**
++  * @brief  Delays routine for the USB device library.
++  * @param  Delay: Delay in ms
++  * @retval None
++  */
++void USBD_LL_Delay(uint32_t Delay)
++{
++  HAL_Delay(Delay);
++}
++
++/**
++  * @brief  Static single allocation.
++  * @param  size: Size of allocated memory
++  * @retval None
++  */
++void *USBD_static_malloc(uint32_t size)
++{
++  static uint32_t mem[(sizeof(USBD_CDC_HandleTypeDef)/4)+1];/* On 32-bit boundary */
++  return mem;
++}
++
++/**
++  * @brief  Dummy memory free
++  * @param  p: Pointer to allocated  memory address
++  * @retval None
++  */
++void USBD_static_free(void *p)
++{
++
++}
++
++/**
++  * @brief Software Device Connection
++  *
++  * This i decided to handled in CDCSerial.cpp so ignored here
++  *
++  * @param hpcd: PCD handle
++  * @param state: Connection state (0: disconnected / 1: connected)
++  * @retval None
++  */
++void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
++{
++  /* USER CODE BEGIN 6 */
++  if (state == 1)
++  {
++    /* Configure Low connection state. */
++
++  }
++  else
++  {
++    /* Configure High connection state. */
++
++  }
++  /* USER CODE END 6 */
++}
++
++
++/**
++  * @brief This function handles USB low priority or CAN RX0 interrupts.
++  */
++void USB_LP_CAN1_RX0_IRQHandler(void)
++{
++  /* USER CODE BEGIN USB_LP_CAN1_RX0_IRQn 0 */
++
++  /* USER CODE END USB_LP_CAN1_RX0_IRQn 0 */
++  HAL_PCD_IRQHandler(&hpcd_USB_FS);
++  /* USER CODE BEGIN USB_LP_CAN1_RX0_IRQn 1 */
++
++  /* USER CODE END USB_LP_CAN1_RX0_IRQn 1 */
++}
++
++#endif  /* defined(USBD_USE_CDC) && defined(USE_USB_FS) && defined(USBCON) */
++
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_conf.h ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_conf.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_conf.h	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_conf.h	2018-12-22 18:28:24.719320400 +0000
+@@ -0,0 +1,207 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_conf.h
++  * @version        : v2.0_Cube
++  * @brief          : Header for usbd_conf.c file.
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++
++/* Define to prevent recursive inclusion -------------------------------------*/
++#ifndef __USBD_CONF__H__
++#define __USBD_CONF__H__
++
++#ifdef __cplusplus
++ extern "C" {
++#endif
++
++/* Includes ------------------------------------------------------------------*/
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++//#include "main.h"
++#include "stm32f1xx.h"
++#include "stm32f1xx_hal.h"
++
++/* USER CODE BEGIN INCLUDE */
++
++/* USER CODE END INCLUDE */
++
++/** @addtogroup USBD_OTG_DRIVER
++  * @{
++  */
++
++/** @defgroup USBD_CONF USBD_CONF
++  * @brief Configuration file for Usb otg low level driver.
++  * @{
++  */
++
++/** @defgroup USBD_CONF_Exported_Variables USBD_CONF_Exported_Variables
++  * @brief Public variables.
++  * @{
++  */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CONF_Exported_Defines USBD_CONF_Exported_Defines
++  * @brief Defines for configuration of the Usb device.
++  * @{
++  */
++
++/*---------- -----------*/
++#define USBD_MAX_NUM_INTERFACES     1
++/*---------- -----------*/
++#define USBD_MAX_NUM_CONFIGURATION     1
++/*---------- -----------*/
++#define USBD_MAX_STR_DESC_SIZ     512
++/*---------- -----------*/
++#define USBD_SUPPORT_USER_STRING     0
++/*---------- -----------*/
++#define USBD_DEBUG_LEVEL     0
++/*---------- -----------*/
++#define USBD_SELF_POWERED     1
++/*---------- -----------*/
++#define MAX_STATIC_ALLOC_SIZE     512
++
++/****************************************/
++/* #define for FS and HS identification */
++#define DEVICE_FS 		0
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CONF_Exported_Macros USBD_CONF_Exported_Macros
++  * @brief Aliases.
++  * @{
++  */
++
++/* Memory management macros */
++
++/** Alias for memory allocation. */
++#define USBD_malloc         (uint32_t *)USBD_static_malloc
++
++/** Alias for memory release. */
++#define USBD_free           USBD_static_free
++
++/** Alias for memory set. */
++#define USBD_memset         /* Not used */
++
++/** Alias for memory copy. */
++#define USBD_memcpy         /* Not used */
++
++/** Alias for delay. */
++#define USBD_Delay          HAL_Delay
++
++/* For footprint reasons and since only one allocation is handled in the HID class
++   driver, the malloc/free is changed into a static allocation method */
++void *USBD_static_malloc(uint32_t size);
++void USBD_static_free(void *p);
++
++/* DEBUG macros */
++
++#if (USBD_DEBUG_LEVEL > 0)
++#define USBD_UsrLog(...)    printf(__VA_ARGS__);\
++                            printf("\n");
++#else
++#define USBD_UsrLog(...)
++#endif
++
++#if (USBD_DEBUG_LEVEL > 1)
++
++#define USBD_ErrLog(...)    printf("ERROR: ") ;\
++                            printf(__VA_ARGS__);\
++                            printf("\n");
++#else
++#define USBD_ErrLog(...)
++#endif
++
++#if (USBD_DEBUG_LEVEL > 2)
++#define USBD_DbgLog(...)    printf("DEBUG : ") ;\
++                            printf(__VA_ARGS__);\
++                            printf("\n");
++#else
++#define USBD_DbgLog(...)
++#endif
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CONF_Exported_Types USBD_CONF_Exported_Types
++  * @brief Types.
++  * @{
++  */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_CONF_Exported_FunctionsPrototype USBD_CONF_Exported_FunctionsPrototype
++  * @brief Declaration of public functions for Usb device.
++  * @{
++  */
++
++/* Exported functions -------------------------------------------------------*/
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __USBD_CONF__H__ */
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_desc.c ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_desc.c
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_desc.c	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_desc.c	2018-12-22 18:28:24.722320400 +0000
+@@ -0,0 +1,363 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_desc.c
++  * @version        : v2.0_Cube
++  * @brief          : This file implements the USB device descriptors.
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++
++/* Includes ------------------------------------------------------------------*/
++#include "usbd_core.h"
++#include "usbd_desc.h"
++#include "usbd_conf.h"
++
++/* USER CODE BEGIN INCLUDE */
++
++/* USER CODE END INCLUDE */
++
++/* Private typedef -----------------------------------------------------------*/
++/* Private define ------------------------------------------------------------*/
++/* Private macro -------------------------------------------------------------*/
++
++/* USER CODE BEGIN PV */
++/* Private variables ---------------------------------------------------------*/
++
++/* USER CODE END PV */
++
++/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
++  * @{
++  */
++
++/** @addtogroup USBD_DESC
++  * @{
++  */
++
++/** @defgroup USBD_DESC_Private_TypesDefinitions USBD_DESC_Private_TypesDefinitions
++  * @brief Private types.
++  * @{
++  */
++
++/* USER CODE BEGIN PRIVATE_TYPES */
++
++/* USER CODE END PRIVATE_TYPES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Private_Defines USBD_DESC_Private_Defines
++  * @brief Private defines.
++  * @{
++  */
++/*
++#define USBD_VID     			1155
++#define USBD_LANGID_STRING     1033
++#define USBD_MANUFACTURER_STRING     "STMicroelectronics"
++#define USBD_PID_FS     22336
++#define USBD_PRODUCT_STRING_FS     "STM32 Virtual ComPort"
++#define USBD_SERIALNUMBER_STRING_FS     "00000000001A"
++#define USBD_CONFIGURATION_STRING_FS     "CDC Config"
++#define USBD_INTERFACE_STRING_FS     "CDC Interface"
++*/
++#define USBD_VID						0x1EAF
++#define USBD_LANGID_STRING     			1033				// MSB 0x04, LSB 0x09
++#define USBD_MANUFACTURER_STRING		"Leaf Labs"
++#define USBD_PID_FS     				0x0004
++#define USBD_PRODUCT_STRING_FS			"Maple"
++#define USBD_SERIALNUMBER_STRING_FS     "000000000001"		// not in original product, shouldnt matter
++#define USBD_CONFIGURATION_STRING_FS	"Maple"				// not in original product?
++#define USBD_INTERFACE_STRING_FS		"Maple"				// not in original product?
++
++/* USER CODE BEGIN PRIVATE_DEFINES */
++
++/* USER CODE END PRIVATE_DEFINES */
++
++/**
++  * @}
++  */
++
++/* USER CODE BEGIN 0 */
++
++/* USER CODE END 0 */
++
++/** @defgroup USBD_DESC_Private_Macros USBD_DESC_Private_Macros
++  * @brief Private macros.
++  * @{
++  */
++
++/* USER CODE BEGIN PRIVATE_MACRO */
++
++/* USER CODE END PRIVATE_MACRO */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Private_FunctionPrototypes USBD_DESC_Private_FunctionPrototypes
++  * @brief Private functions declaration.
++  * @{
++  */
++
++uint8_t * USBD_FS_DeviceDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_LangIDStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_ManufacturerStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_ProductStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_SerialStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_ConfigStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++uint8_t * USBD_FS_InterfaceStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
++
++#ifdef USB_SUPPORT_USER_STRING_DESC
++uint8_t * USBD_FS_USRStringDesc(USBD_SpeedTypeDef speed, uint8_t idx, uint16_t *length);
++#endif /* USB_SUPPORT_USER_STRING_DESC */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Private_Variables USBD_DESC_Private_Variables
++  * @brief Private variables.
++  * @{
++  */
++
++USBD_DescriptorsTypeDef FS_Desc =
++{
++  USBD_FS_DeviceDescriptor
++, USBD_FS_LangIDStrDescriptor
++, USBD_FS_ManufacturerStrDescriptor
++, USBD_FS_ProductStrDescriptor
++, USBD_FS_SerialStrDescriptor
++, USBD_FS_ConfigStrDescriptor
++, USBD_FS_InterfaceStrDescriptor
++};
++
++#if defined ( __ICCARM__ ) /* IAR Compiler */
++  #pragma data_alignment=4
++#endif /* defined ( __ICCARM__ ) */
++/** USB standard device descriptor. */
++__ALIGN_BEGIN uint8_t USBD_FS_DeviceDesc[USB_LEN_DEV_DESC] __ALIGN_END =
++{
++  0x12,                       /*bLength */
++  USB_DESC_TYPE_DEVICE,       /*bDescriptorType*/
++  0x00,                       /*bcdUSB */
++  0x02,
++  0x02,                       /*bDeviceClass*/
++  0x02,                       /*bDeviceSubClass*/
++  0x00,                       /*bDeviceProtocol*/
++  USB_MAX_EP0_SIZE,           /*bMaxPacketSize*/
++  LOBYTE(USBD_VID),           /*idVendor*/
++  HIBYTE(USBD_VID),           /*idVendor*/
++  LOBYTE(USBD_PID_FS),        /*idProduct*/
++  HIBYTE(USBD_PID_FS),        /*idProduct*/
++  0x00,                       /*bcdDevice rel. 2.00*/
++  0x02,
++  USBD_IDX_MFC_STR,           /*Index of manufacturer  string*/
++  USBD_IDX_PRODUCT_STR,       /*Index of product string*/
++  USBD_IDX_SERIAL_STR,        /*Index of serial number string*/
++  USBD_MAX_NUM_CONFIGURATION  /*bNumConfigurations*/
++};
++
++/* USB_DeviceDescriptor */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Private_Variables USBD_DESC_Private_Variables
++  * @brief Private variables.
++  * @{
++  */
++
++#if defined ( __ICCARM__ ) /* IAR Compiler */
++  #pragma data_alignment=4
++#endif /* defined ( __ICCARM__ ) */
++
++/** USB lang indentifier descriptor. */
++__ALIGN_BEGIN uint8_t USBD_LangIDDesc[USB_LEN_LANGID_STR_DESC] __ALIGN_END =
++{
++     USB_LEN_LANGID_STR_DESC,
++     USB_DESC_TYPE_STRING,
++     LOBYTE(USBD_LANGID_STRING),
++     HIBYTE(USBD_LANGID_STRING)
++};
++
++#if defined ( __ICCARM__ ) /* IAR Compiler */
++  #pragma data_alignment=4
++#endif /* defined ( __ICCARM__ ) */
++/* Internal string descriptor. */
++__ALIGN_BEGIN uint8_t USBD_StrDesc[USBD_MAX_STR_DESC_SIZ] __ALIGN_END;
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Private_Functions USBD_DESC_Private_Functions
++  * @brief Private functions.
++  * @{
++  */
++
++/**
++  * @brief  Return the device descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_DeviceDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  *length = sizeof(USBD_FS_DeviceDesc);
++  return USBD_FS_DeviceDesc;
++}
++
++/**
++  * @brief  Return the LangID string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_LangIDStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  *length = sizeof(USBD_LangIDDesc);
++  return USBD_LangIDDesc;
++}
++
++/**
++  * @brief  Return the product string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_ProductStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  if(speed == 0)
++  {
++    USBD_GetString((uint8_t *)USBD_PRODUCT_STRING_FS, USBD_StrDesc, length);
++  }
++  else
++  {
++    USBD_GetString((uint8_t *)USBD_PRODUCT_STRING_FS, USBD_StrDesc, length);
++  }
++  return USBD_StrDesc;
++}
++
++/**
++  * @brief  Return the manufacturer string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_ManufacturerStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  USBD_GetString((uint8_t *)USBD_MANUFACTURER_STRING, USBD_StrDesc, length);
++  return USBD_StrDesc;
++}
++
++/**
++  * @brief  Return the serial number string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_SerialStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  if(speed == USBD_SPEED_HIGH)
++  {
++    USBD_GetString((uint8_t *)USBD_SERIALNUMBER_STRING_FS, USBD_StrDesc, length);
++  }
++  else
++  {
++    USBD_GetString((uint8_t *)USBD_SERIALNUMBER_STRING_FS, USBD_StrDesc, length);
++  }
++  return USBD_StrDesc;
++}
++
++/**
++  * @brief  Return the configuration string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_ConfigStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  if(speed == USBD_SPEED_HIGH)
++  {
++    USBD_GetString((uint8_t *)USBD_CONFIGURATION_STRING_FS, USBD_StrDesc, length);
++  }
++  else
++  {
++    USBD_GetString((uint8_t *)USBD_CONFIGURATION_STRING_FS, USBD_StrDesc, length);
++  }
++  return USBD_StrDesc;
++}
++
++/**
++  * @brief  Return the interface string descriptor
++  * @param  speed : Current device speed
++  * @param  length : Pointer to data length variable
++  * @retval Pointer to descriptor buffer
++  */
++uint8_t * USBD_FS_InterfaceStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *length)
++{
++  if(speed == 0)
++  {
++    USBD_GetString((uint8_t *)USBD_INTERFACE_STRING_FS, USBD_StrDesc, length);
++  }
++  else
++  {
++    USBD_GetString((uint8_t *)USBD_INTERFACE_STRING_FS, USBD_StrDesc, length);
++  }
++  return USBD_StrDesc;
++}
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_desc.h ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_desc.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/usb/usbd_desc.h	1970-01-01 01:00:00.000000000 +0100
++++ ./1.4.1/variants/MAPLEMINI_F103CB/usb/usbd_desc.h	2018-12-22 18:28:24.724320400 +0000
+@@ -0,0 +1,155 @@
++/**
++  ******************************************************************************
++  * @file           : usbd_desc.c
++  * @version        : v2.0_Cube
++  * @brief          : Header for usbd_conf.c file.
++  ******************************************************************************
++  * This notice applies to any and all portions of this file
++  * that are not between comment pairs USER CODE BEGIN and
++  * USER CODE END. Other portions of this file, whether 
++  * inserted by the user or by software development tools
++  * are owned by their respective copyright owners.
++  *
++  * Copyright (c) 2018 STMicroelectronics International N.V. 
++  * All rights reserved.
++  *
++  * Redistribution and use in source and binary forms, with or without 
++  * modification, are permitted, provided that the following conditions are met:
++  *
++  * 1. Redistribution of source code must retain the above copyright notice, 
++  *    this list of conditions and the following disclaimer.
++  * 2. Redistributions in binary form must reproduce the above copyright notice,
++  *    this list of conditions and the following disclaimer in the documentation
++  *    and/or other materials provided with the distribution.
++  * 3. Neither the name of STMicroelectronics nor the names of other 
++  *    contributors to this software may be used to endorse or promote products 
++  *    derived from this software without specific written permission.
++  * 4. This software, including modifications and/or derivative works of this 
++  *    software, must execute solely and exclusively on microcontroller or
++  *    microprocessor devices manufactured by or for STMicroelectronics.
++  * 5. Redistribution and use of this software other than as permitted under 
++  *    this license is void and will automatically terminate your rights under 
++  *    this license. 
++  *
++  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
++  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
++  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
++  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
++  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
++  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
++  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
++  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
++  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
++  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  *
++  ******************************************************************************
++  */
++/* Define to prevent recursive inclusion -------------------------------------*/
++#ifndef __USBD_DESC__C__
++#define __USBD_DESC__C__
++
++#ifdef __cplusplus
++ extern "C" {
++#endif
++
++/* Includes ------------------------------------------------------------------*/
++#include "usbd_def.h"
++
++/* USER CODE BEGIN INCLUDE */
++
++/* USER CODE END INCLUDE */
++
++/** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
++  * @{
++  */
++
++/** @defgroup USBD_DESC USBD_DESC
++  * @brief Usb device descriptors module.
++  * @{
++  */
++
++/** @defgroup USBD_DESC_Exported_Defines USBD_DESC_Exported_Defines
++  * @brief Defines.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_DEFINES */
++
++/* USER CODE END EXPORTED_DEFINES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Exported_TypesDefinitions USBD_DESC_Exported_TypesDefinitions
++  * @brief Types.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_TYPES */
++
++/* USER CODE END EXPORTED_TYPES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Exported_Macros USBD_DESC_Exported_Macros
++  * @brief Aliases.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_MACRO */
++
++/* USER CODE END EXPORTED_MACRO */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Exported_Variables USBD_DESC_Exported_Variables
++  * @brief Public variables.
++  * @{
++  */
++
++/** Descriptor for the Usb device. */
++extern USBD_DescriptorsTypeDef FS_Desc;
++
++/* USER CODE BEGIN EXPORTED_VARIABLES */
++
++/* USER CODE END EXPORTED_VARIABLES */
++
++/**
++  * @}
++  */
++
++/** @defgroup USBD_DESC_Exported_FunctionsPrototype USBD_DESC_Exported_FunctionsPrototype
++  * @brief Public functions declaration.
++  * @{
++  */
++
++/* USER CODE BEGIN EXPORTED_FUNCTIONS */
++
++/* USER CODE END EXPORTED_FUNCTIONS */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++/**
++  * @}
++  */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __USBD_DESC__C__ */
++
++/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/variant.cpp ./1.4.1/variants/MAPLEMINI_F103CB/variant.cpp
+--- ./1.4.0/variants/MAPLEMINI_F103CB/variant.cpp	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/variants/MAPLEMINI_F103CB/variant.cpp	2018-12-22 18:28:24.727320400 +0000
+@@ -96,6 +96,7 @@
+ extern "C" {
+ #endif
+ 
++
+ /**
+   * @brief  System Clock Configuration
+   *         The system Clock is configured as follow :
+diff -Naur ./1.4.0/variants/MAPLEMINI_F103CB/variant.h ./1.4.1/variants/MAPLEMINI_F103CB/variant.h
+--- ./1.4.0/variants/MAPLEMINI_F103CB/variant.h	2018-10-30 23:00:00.000000000 +0000
++++ ./1.4.1/variants/MAPLEMINI_F103CB/variant.h	2018-12-23 17:09:04.064424900 +0000
+@@ -111,11 +111,14 @@
+ #define TIMER_SERVO             TIM2  //TODO: advanced-control timers don't work
+ 
+ // UART Definitions
+-#define SERIAL_UART_INSTANCE    1
+ // Default pin used for 'Serial' instance
+ // Mandatory for Firmata
++#if !defined(GIGGLERS_SERIAL)
++// HardwareSerial.cpp constructor will setup real uart if these defines are present
++#define SERIAL_UART_INSTANCE    1
+ #define PIN_SERIAL_RX           PA10
+ #define PIN_SERIAL_TX           PA9
++#endif /* !defined(GIGGLERS_SERIAL) */
+ 
+ #ifdef __cplusplus
+ } // extern "C"
+@@ -125,6 +128,7 @@
+  *----------------------------------------------------------------------------*/
+ 
+ #ifdef __cplusplus
++
+ // These serial port names are intended to allow libraries and architecture-neutral
+ // sketches to automatically default to the correct port name for a particular type
+ // of use.  For example, a GPS module would normally connect to SERIAL_PORT_HARDWARE_OPEN,
