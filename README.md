@@ -1,5 +1,5 @@
 # Arduino Core STM32 Maple Support
-STM32dunio Arduino Core STM32 at release 1.4.0 or below did not have Maple Mini support beyond basic programming and debug via external devices like STLink or a TTL UART or other programmer.
+[STM32dunio Arduino Core STM32 at release 1.4.0](https://github.com/stm32duino/Arduino_Core_STM32/tree/1.4.0) or below did not have Maple Mini support beyond basic programming and debug via external devices like STLink or a TTL UART or other programmer.
 
 [The original Maple Mini release for Ardino](https://wiki.stm32duino.com/index.php?title=Maple_Mini) install had DFU bootloader support and CDC serial for debugging and feedback via the Arduino IDE Monitor.  These are not planned for release until 1.5.0 so this GitHub is a temporary patch for Windows installs.
 
